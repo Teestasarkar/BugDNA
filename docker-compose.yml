@@ -120,6 +120,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       API_PORT: 4000
+      RUN_MIGRATIONS_ON_START: "true"
       APP_URL: ${APP_URL:-http://localhost:3000}
       API_URL: ${API_URL:-http://localhost:4000}
       LOG_LEVEL: ${LOG_LEVEL:-debug}
@@ -166,10 +167,11 @@ services:
       # and retry until it answers.
       ml-service:
         condition: service_started
-    # Apply migrations before serving. `migrate deploy` is idempotent and is the
-    # correct command for a non-interactive environment (unlike `migrate dev`).
-    command: >
-      sh -c "npx prisma migrate deploy && node dist/server.js"
+    # Migrations run in the image's entrypoint rather than in a command override
+    # here, so Compose and every PaaS use the same mechanism. `migrate deploy`
+    # is idempotent and is the correct command for a non-interactive environment
+    # (unlike `migrate dev`). Only this service sets the flag: two processes
+    # racing to migrate the same database is how a deploy corrupts its schema.
     networks: [bugdna]
 
   # ---------------------------------------------------------------------------

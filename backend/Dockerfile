@@ -60,6 +60,8 @@ COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --chown=node:node package.json ./
+COPY --chown=node:node docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
 
 USER node
 
@@ -73,5 +75,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # tini reaps zombies and forwards SIGTERM, which is what makes the graceful
 # shutdown in server.ts actually run.
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "./docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]

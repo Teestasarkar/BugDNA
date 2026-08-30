@@ -93,11 +93,14 @@ services:
     dockerContext: ./backend
     dockerfilePath: ./backend/Dockerfile
     healthCheckPath: /healthz
-    # Applies migrations, then serves. Exactly one service may do this.
-    # No `sh -c` wrapper: Render already evaluates this in a shell, so wrapping
-    # it makes the whole string the command *name* and the container exits 127.
-    dockerCommand: npx prisma migrate deploy && node dist/server.js
+    # No dockerCommand. Render word-splits it and execs without a shell, so `&&`
+    # is not an operator there — it arrives as an argument to prisma. Migrations
+    # run in the image's entrypoint instead, gated by RUN_MIGRATIONS_ON_START
+    # below, which also keeps SIGTERM reaching the graceful shutdown.
     envVars:
+      # Exactly one service may apply migrations; two would race.
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
       - key: NODE_ENV
         value: production
       - key: LOG_FORMAT
