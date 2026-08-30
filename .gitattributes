@@ -1,0 +1,20 @@
+# Normalise text in the repository, and let checkouts use the platform's
+# convention — except where a file is read by a Linux kernel or shell, where
+# CRLF is not a style question. A `#!/bin/sh\r` shebang fails with
+# "no such file or directory" naming a file that plainly exists, which is a
+# genuinely expensive hour to lose.
+* text=auto
+
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+docker-compose*.yml text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sql           text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
