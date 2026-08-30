@@ -1,0 +1,34 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+
+  "//": [
+    "Deploy the frontend only. Set the Vercel project's Root Directory to",
+    "'frontend' and copy this file there, or run `vercel --cwd frontend`.",
+    "",
+    "NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so",
+    "they must be set as Vercel environment variables before the first build.",
+    "Changing them requires a redeploy, not just a restart.",
+    "",
+    "  NEXT_PUBLIC_API_URL = https://bugdna-api.onrender.com",
+    "  NEXT_PUBLIC_WS_URL  = https://bugdna-api.onrender.com",
+    "",
+    "Then set CORS_ORIGINS and APP_URL on the API to this Vercel origin, and",
+    "point the GitHub OAuth callback at the API. See docs/DEPLOYMENT.md."
+  ],
+
+  "buildCommand": "npm run build",
+  "installCommand": "npm ci",
+  "outputDirectory": ".next",
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

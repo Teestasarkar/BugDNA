@@ -1,0 +1,402 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ==========================================================================
+   BugDNA design system
+   ==========================================================================
+   A developer-tool aesthetic: dense, calm, monospaced where it carries meaning
+   (SHAs, file paths, scores), and colour reserved almost entirely for risk.
+
+   The single most important design decision here is that **colour means risk**.
+   Nothing else in the interface is allowed to be emerald, amber or rose, so a
+   red badge always means the same thing and a glance is enough. The brand accent
+   is violet precisely so it can never be mistaken for a risk state.
+   ========================================================================== */
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+
+  /* --- surfaces ---------------------------------------------------------- */
+  --background: oklch(0.985 0.002 250);
+  --foreground: oklch(0.205 0.01 258);
+
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  /* A second surface level, for nested panels and table headers. */
+  --surface: oklch(0.972 0.003 255);
+  --surface-foreground: oklch(0.35 0.012 258);
+
+  /* --- brand ------------------------------------------------------------- */
+  /* Violet: deliberately outside the risk palette so it never reads as a
+     severity signal. */
+  --primary: oklch(0.53 0.2 285);
+  --primary-foreground: oklch(0.99 0.005 285);
+
+  --secondary: oklch(0.955 0.005 258);
+  --secondary-foreground: oklch(0.3 0.012 258);
+
+  --muted: oklch(0.958 0.004 258);
+  --muted-foreground: oklch(0.53 0.014 258);
+
+  --accent: oklch(0.95 0.015 285);
+  --accent-foreground: oklch(0.35 0.06 285);
+
+  --destructive: oklch(0.58 0.21 25);
+  --destructive-foreground: oklch(0.99 0.005 25);
+
+  --border: oklch(0.905 0.005 258);
+  --input: oklch(0.905 0.005 258);
+  --ring: oklch(0.53 0.2 285 / 45%);
+
+  /* --- risk palette -----------------------------------------------------
+     Four bands, matched to the API's RISK_BANDS. Each has a foreground for
+     text, a `bg` for subtle fills and a `border` for outlines, so a badge, a
+     chart series and a progress bar can all be visibly the same severity. */
+  --risk-low: oklch(0.6 0.13 162);
+  --risk-low-bg: oklch(0.95 0.04 162);
+  --risk-low-border: oklch(0.82 0.09 162);
+
+  --risk-moderate: oklch(0.66 0.14 78);
+  --risk-moderate-bg: oklch(0.96 0.05 85);
+  --risk-moderate-border: oklch(0.85 0.1 82);
+
+  --risk-high: oklch(0.63 0.18 42);
+  --risk-high-bg: oklch(0.96 0.045 45);
+  --risk-high-border: oklch(0.84 0.11 44);
+
+  --risk-critical: oklch(0.57 0.21 18);
+  --risk-critical-bg: oklch(0.96 0.04 18);
+  --risk-critical-border: oklch(0.85 0.09 18);
+
+  /* --- diff ------------------------------------------------------------- */
+  --diff-add-bg: oklch(0.955 0.045 155);
+  --diff-add-text: oklch(0.42 0.11 158);
+  --diff-add-gutter: oklch(0.9 0.07 155);
+  --diff-del-bg: oklch(0.958 0.035 22);
+  --diff-del-text: oklch(0.46 0.14 25);
+  --diff-del-gutter: oklch(0.9 0.06 22);
+  --diff-meta: oklch(0.55 0.03 285);
+
+  /* --- charts ------------------------------------------------------------
+     Chart series avoid the risk hues so a trend line is never confused with a
+     severity. Ordered for categorical use. */
+  --chart-1: oklch(0.55 0.19 285);
+  --chart-2: oklch(0.6 0.14 235);
+  --chart-3: oklch(0.62 0.12 198);
+  --chart-4: oklch(0.58 0.13 310);
+  --chart-5: oklch(0.5 0.09 258);
+
+  /* --- sidebar ---------------------------------------------------------- */
+  --sidebar: oklch(0.978 0.003 258);
+  --sidebar-foreground: oklch(0.35 0.012 258);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.945 0.012 285);
+  --sidebar-accent-foreground: oklch(0.32 0.06 285);
+  --sidebar-border: oklch(0.91 0.005 258);
+  --sidebar-ring: var(--ring);
+}
+
+.dark {
+  --background: oklch(0.165 0.008 262);
+  --foreground: oklch(0.94 0.004 258);
+
+  --card: oklch(0.203 0.009 262);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.223 0.01 262);
+  --popover-foreground: var(--foreground);
+
+  --surface: oklch(0.228 0.01 262);
+  --surface-foreground: oklch(0.82 0.006 258);
+
+  --primary: oklch(0.7 0.16 288);
+  --primary-foreground: oklch(0.17 0.03 288);
+
+  --secondary: oklch(0.262 0.011 262);
+  --secondary-foreground: oklch(0.9 0.005 258);
+
+  --muted: oklch(0.252 0.01 262);
+  --muted-foreground: oklch(0.665 0.014 258);
+
+  --accent: oklch(0.29 0.035 288);
+  --accent-foreground: oklch(0.88 0.05 288);
+
+  --destructive: oklch(0.65 0.19 25);
+  --destructive-foreground: oklch(0.16 0.03 25);
+
+  --border: oklch(0.295 0.011 262);
+  --input: oklch(0.315 0.012 262);
+  --ring: oklch(0.7 0.16 288 / 45%);
+
+  /* Risk hues brightened for dark surfaces; the `bg` values become tints
+     rather than washes so they read at low luminance. */
+  --risk-low: oklch(0.75 0.15 163);
+  --risk-low-bg: oklch(0.3 0.055 163);
+  --risk-low-border: oklch(0.42 0.09 163);
+
+  --risk-moderate: oklch(0.82 0.15 85);
+  --risk-moderate-bg: oklch(0.32 0.055 82);
+  --risk-moderate-border: oklch(0.45 0.09 82);
+
+  --risk-high: oklch(0.76 0.16 48);
+  --risk-high-bg: oklch(0.32 0.06 45);
+  --risk-high-border: oklch(0.46 0.1 45);
+
+  --risk-critical: oklch(0.71 0.19 20);
+  --risk-critical-bg: oklch(0.31 0.07 20);
+  --risk-critical-border: oklch(0.45 0.12 20);
+
+  --diff-add-bg: oklch(0.265 0.045 158);
+  --diff-add-text: oklch(0.82 0.13 158);
+  --diff-add-gutter: oklch(0.33 0.06 158);
+  --diff-del-bg: oklch(0.27 0.045 22);
+  --diff-del-text: oklch(0.8 0.13 25);
+  --diff-del-gutter: oklch(0.35 0.06 22);
+  --diff-meta: oklch(0.7 0.06 288);
+
+  --chart-1: oklch(0.7 0.17 288);
+  --chart-2: oklch(0.7 0.14 238);
+  --chart-3: oklch(0.72 0.12 200);
+  --chart-4: oklch(0.72 0.14 312);
+  --chart-5: oklch(0.65 0.08 258);
+
+  --sidebar: oklch(0.188 0.009 262);
+  --sidebar-foreground: oklch(0.85 0.006 258);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.275 0.03 288);
+  --sidebar-accent-foreground: oklch(0.9 0.05 288);
+  --sidebar-border: oklch(0.28 0.011 262);
+  --sidebar-ring: var(--ring);
+}
+
+/* ==========================================================================
+   Tailwind theme bindings
+   ========================================================================== */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-low-bg: var(--risk-low-bg);
+  --color-risk-low-border: var(--risk-low-border);
+  --color-risk-moderate: var(--risk-moderate);
+  --color-risk-moderate-bg: var(--risk-moderate-bg);
+  --color-risk-moderate-border: var(--risk-moderate-border);
+  --color-risk-high: var(--risk-high);
+  --color-risk-high-bg: var(--risk-high-bg);
+  --color-risk-high-border: var(--risk-high-border);
+  --color-risk-critical: var(--risk-critical);
+  --color-risk-critical-bg: var(--risk-critical-bg);
+  --color-risk-critical-border: var(--risk-critical-border);
+
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-add-text: var(--diff-add-text);
+  --color-diff-add-gutter: var(--diff-add-gutter);
+  --color-diff-del-bg: var(--diff-del-bg);
+  --color-diff-del-text: var(--diff-del-text);
+  --color-diff-del-gutter: var(--diff-del-gutter);
+  --color-diff-meta: var(--diff-meta);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Prevents the page shifting when a dialog locks scroll. */
+    scrollbar-gutter: stable;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
+  }
+
+  /* Numbers in tables and score displays must not jitter as they change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-primary/25;
+  }
+
+  /* Visible, consistent focus for keyboard users. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* --- scrollbars ------------------------------------------------------- */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+    background-clip: content-box;
+  }
+}
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+@layer utilities {
+  /* Risk-aware surface: one class sets text, background and border to the
+     matching band, so a component only needs the level name. */
+  .risk-low {
+    color: var(--risk-low);
+    background-color: var(--risk-low-bg);
+    border-color: var(--risk-low-border);
+  }
+  .risk-moderate {
+    color: var(--risk-moderate);
+    background-color: var(--risk-moderate-bg);
+    border-color: var(--risk-moderate-border);
+  }
+  .risk-high {
+    color: var(--risk-high);
+    background-color: var(--risk-high-bg);
+    border-color: var(--risk-high-border);
+  }
+  .risk-critical {
+    color: var(--risk-critical);
+    background-color: var(--risk-critical-bg);
+    border-color: var(--risk-critical-border);
+  }
+
+  /* Subtle grid backdrop used on the landing page and empty states. */
+  .grid-backdrop {
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+  }
+
+  /* Shimmer for skeletons — respects reduced-motion below. */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 25%,
+      color-mix(in oklch, var(--muted) 70%, var(--background)) 37%,
+      var(--muted) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+
+  /* Truncate a long file path from the left, keeping the filename visible. */
+  .truncate-start {
+    direction: rtl;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Anyone who has asked for less motion gets none of the decorative kind. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .shimmer {
+    animation: none;
+    background: var(--muted);
+  }
+}
+
+/* Recharts injects inline focus outlines on its SVG wrappers. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}

@@ -1,0 +1,26 @@
+# Root build context — keep it small. Only ml-service/ and contracts/ are built
+# from here (see docker-compose.yml).
+**/node_modules
+**/dist
+**/.next
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/coverage
+.git
+.github
+docs
+frontend
+backend
+infra
+ml-service/models/*
+!ml-service/models/.gitkeep
+ml-service/data
+ml-service/tests
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log

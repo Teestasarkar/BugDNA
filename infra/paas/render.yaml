@@ -1,0 +1,164 @@
+# =============================================================================
+# BugDNA on Render — API, worker and risk service
+# =============================================================================
+# Import as a Blueprint: Render -> New -> Blueprint -> point at this repo.
+#
+# The frontend goes to Vercel separately (see infra/paas/vercel.json), and the
+# datastores are external: Neon for Postgres, Upstash for Redis. Render's own
+# free Postgres expires after 90 days, which is not what you want under a demo.
+#
+# Order matters — each step's output is the next step's input. See
+# docs/DEPLOYMENT.md §2.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Risk service — private, never publicly routable
+  # ---------------------------------------------------------------------------
+  - type: pserv
+    name: bugdna-ml
+    runtime: docker
+    plan: starter
+    # Root context: the image needs contracts/feature-spec.json.
+    dockerContext: .
+    dockerfilePath: ./ml-service/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: ML_PORT
+        value: "8000"
+      - key: MODEL_DIR
+        value: /app/models
+      - key: CONTRACTS_DIR
+        value: /app/contracts
+      # Trains a bootstrap model on first boot so predictions come from real
+      # XGBoost inference rather than the fallback.
+      - key: BOOTSTRAP_MODEL_ON_START
+        value: "true"
+      - key: BOOTSTRAP_ROWS
+        value: "8000"
+      - key: ML_SERVICE_TOKEN
+        sync: false          # generate: openssl rand -hex 24
+    disk:
+      # Persists the trained artifact across deploys.
+      name: ml-models
+      mountPath: /app/models
+      sizeGB: 1
+
+  # ---------------------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: bugdna-api
+    runtime: docker
+    plan: starter
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /healthz
+    # Applies migrations, then serves. Exactly one service must do this.
+    dockerCommand: sh -c "npx prisma migrate deploy && node dist/server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "4000"
+      - key: LOG_FORMAT
+        value: json
+      - key: TRUST_PROXY
+        value: "true"
+      # Render terminates TLS and the frontend is on a different site, so the
+      # session cookie needs SameSite=None, which requires Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+
+      # --- external datastores (paste these in) ---
+      - key: DATABASE_URL
+        sync: false          # Neon connection string, ?sslmode=require
+      - key: REDIS_URL
+        sync: false          # Upstash rediss:// URL
+
+      # --- secrets ---
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false          # MUST be exactly 64 hex chars: openssl rand -hex 32
+      - key: ML_SERVICE_TOKEN
+        sync: false          # same value as bugdna-ml
+
+      # --- wiring ---
+      - key: ML_SERVICE_URL
+        fromService:
+          name: bugdna-ml
+          type: pserv
+          property: hostport
+      - key: APP_URL
+        sync: false          # https://<your-app>.vercel.app
+      - key: API_URL
+        sync: false          # https://bugdna-api.onrender.com
+      - key: CORS_ORIGINS
+        sync: false          # the Vercel origin
+
+      # --- GitHub ---
+      - key: GITHUB_MODE
+        value: live
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CALLBACK_URL
+        sync: false          # https://bugdna-api.onrender.com/api/v1/auth/github/callback
+
+      - key: ENABLE_DEMO_LOGIN
+        value: "true"
+      - key: HIGH_RISK_NOTIFY_THRESHOLD
+        value: "70"
+
+  # ---------------------------------------------------------------------------
+  # Worker — same image, different command
+  # ---------------------------------------------------------------------------
+  - type: worker
+    name: bugdna-worker
+    runtime: docker
+    plan: starter
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerCommand: node dist/worker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      # Lower than development: on a small instance, several concurrent analyses
+      # each holding a diff in memory is the main OOM risk.
+      - key: ANALYSIS_CONCURRENCY
+        value: "2"
+
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        fromService:
+          name: bugdna-api
+          type: web
+          envVarKey: SESSION_SECRET
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false          # must match the API exactly, or stored tokens are unreadable
+      - key: ML_SERVICE_TOKEN
+        sync: false
+      - key: ML_SERVICE_URL
+        fromService:
+          name: bugdna-ml
+          type: pserv
+          property: hostport
+      - key: APP_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: GITHUB_MODE
+        value: live
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false

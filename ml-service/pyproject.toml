@@ -1,0 +1,43 @@
+[project]
+name = "bugdna-ml"
+version = "1.0.0"
+description = "BugDNA risk scoring and explainability service"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "venv", "models", "data", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    # The scoring internals deliberately use short mathematical names.
+    "E741",
+    # `zip(..., strict=)` is used where it matters; elsewhere the pairing is
+    # guaranteed by construction.
+    "B905",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Training scripts prepend to sys.path before importing app modules, which
+# necessarily puts imports after code.
+"training/*.py" = ["E402"]
+# Tests use long descriptive assertion messages.
+"tests/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    # starlette's TestClient deprecation notice is not actionable here.
+    "ignore::DeprecationWarning",
+]

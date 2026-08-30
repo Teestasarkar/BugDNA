@@ -1,0 +1,810 @@
+// =============================================================================
+// BugDNA — Prisma schema
+// =============================================================================
+// PostgreSQL is the system of record. Redis holds only cache / transient job
+// state and is always reconstructible from what lives here.
+//
+// Tenancy model
+// -------------
+// Every row that can carry user data is reachable from a Repository, and a
+// Repository is scoped by `ownerUserId` (the user who connected it) plus an
+// optional `teamId`. Read access is therefore expressible as a single
+// predicate, applied centrally in modules/repositories/repository.access.ts:
+//
+//     ownerUserId = :me  OR  teamId IN (:myTeamIds)
+//
+// Analyses, pull requests, changed files, risk factors, recommendations,
+// deployments and health snapshots are all children of a Repository, so they
+// inherit that predicate rather than re-implementing it.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Identity & tenancy
+// =============================================================================
+
+model User {
+  id        String  @id @default(cuid())
+  email     String? @unique
+  name      String?
+  avatarUrl String?
+
+  // GitHub identity (a user always arrives via GitHub OAuth)
+  githubId    BigInt  @unique
+  githubLogin String  @unique
+  githubType  String  @default("User") // User | Organization
+  company     String?
+  location    String?
+  bio         String?
+
+  isDemo     Boolean   @default(false)
+  lastSeenAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  connection      GithubConnection?
+  sessions        Session[]
+  teamMemberships TeamMember[]
+  ownedTeams      Team[]            @relation("TeamOwner")
+  repositories    Repository[]      @relation("RepositoryOwner")
+  analyses        Analysis[]        @relation("AnalysisRequestedBy")
+  mergeDecisions  MergeDecision[]
+  notifications   Notification[]
+
+  @@index([githubLogin])
+  @@map("users")
+}
+
+/// Encrypted GitHub OAuth credential. The token is AES-256-GCM encrypted at
+/// rest (see lib/crypto.ts); plaintext never touches the database.
+model GithubConnection {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessTokenCipher String // base64 ciphertext
+  accessTokenIv     String // base64 12-byte IV
+  accessTokenTag    String // base64 16-byte GCM auth tag
+  tokenVersion      Int    @default(1)
+
+  scopes    String[]  @default([])
+  tokenType String    @default("bearer")
+  expiresAt DateTime?
+
+  connectedAt     DateTime  @default(now())
+  lastValidatedAt DateTime?
+  lastSyncedAt    DateTime?
+  revokedAt       DateTime?
+
+  // Cached rate-limit view so the UI can warn before we get throttled.
+  rateLimitRemaining Int?
+  rateLimitResetAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("github_connections")
+}
+
+/// Server-side session record. The cookie carries a signed JWT whose `sid`
+/// points here, so individual sessions remain revocable.
+model Session {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userAgent String?
+  ip        String?
+
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Team {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  description String?
+  avatarUrl   String?
+
+  ownerId String
+  owner   User   @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      TeamMember[]
+  repositories Repository[]
+
+  @@index([ownerId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id     String   @id @default(cuid())
+  teamId String
+  userId String
+  role   TeamRole @default(MEMBER)
+
+  joinedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// =============================================================================
+// GitHub domain mirror
+// =============================================================================
+
+/// A repository the user has explicitly connected. We mirror only what the
+/// risk pipeline and analytics need; GitHub stays the source of truth for
+/// repository content.
+model Repository {
+  id       String @id @default(cuid())
+  githubId BigInt
+
+  owner    String // org or user login
+  name     String
+  fullName String // "owner/name"
+
+  private       Boolean @default(false)
+  description   String?
+  defaultBranch String  @default("main")
+  language      String?
+  htmlUrl       String?
+  homepage      String?
+
+  stars      Int @default(0)
+  forks      Int @default(0)
+  openIssues Int @default(0)
+  sizeKb     Int @default(0)
+
+  // --- tenancy ---
+  ownerUserId String
+  ownerUser   User    @relation("RepositoryOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  teamId      String?
+  team        Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // --- connection lifecycle ---
+  connectedAt  DateTime  @default(now())
+  lastSyncedAt DateTime?
+  syncError    String?
+  isActive     Boolean   @default(true)
+  autoAnalyze  Boolean   @default(true)
+
+  githubCreatedAt DateTime?
+  githubPushedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pullRequests    PullRequest[]
+  analyses        Analysis[]
+  deployments     Deployment[]
+  healthSnapshots RepositoryHealthSnapshot[]
+
+  // A given GitHub repo may be connected once per owning user.
+  @@unique([ownerUserId, githubId])
+  @@index([ownerUserId, isActive])
+  @@index([teamId])
+  @@index([fullName])
+  @@map("repositories")
+}
+
+model PullRequest {
+  id       String @id @default(cuid())
+  githubId BigInt
+  number   Int
+
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  title  String
+  body   String?
+  state  PullRequestState @default(OPEN)
+  draft  Boolean          @default(false)
+  locked Boolean          @default(false)
+
+  authorLogin     String
+  authorAvatarUrl String?
+  authorGithubId  BigInt?
+
+  baseRef String
+  baseSha String?
+  headRef String
+  headSha String
+
+  // Aggregate change shape, straight from the GitHub PR payload.
+  additions    Int @default(0)
+  deletions    Int @default(0)
+  changedFiles Int @default(0)
+  commits      Int @default(0)
+
+  reviewComments Int @default(0)
+  comments       Int @default(0)
+
+  labels         String[] @default([])
+  htmlUrl        String?
+  mergeable      Boolean?
+  mergeableState String?
+
+  githubCreatedAt DateTime
+  githubUpdatedAt DateTime
+  mergedAt        DateTime?
+  closedAt        DateTime?
+
+  // Set when a merge is recorded, so health analytics can ask whether a risky
+  // PR actually preceded a failed deployment.
+  mergedBySha String?
+
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  files          ChangedFile[]
+  analyses       Analysis[]
+  deployments    Deployment[]
+  mergeDecisions MergeDecision[]
+
+  @@unique([repositoryId, number])
+  @@index([repositoryId, state])
+  @@index([repositoryId, githubUpdatedAt])
+  @@index([authorLogin])
+  @@map("pull_requests")
+}
+
+enum PullRequestState {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+/// One changed file in a PR, plus the classification the feature extractor
+/// derives from its path and patch. `patch` is truncated to
+/// GITHUB_MAX_PATCH_BYTES — enough for reviewer context, not the whole blob.
+model ChangedFile {
+  id            String      @id @default(cuid())
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+
+  filename         String
+  previousFilename String?
+  status           FileChangeType @default(MODIFIED)
+
+  additions Int @default(0)
+  deletions Int @default(0)
+  changes   Int @default(0)
+
+  patch          String? // unified diff hunk, possibly truncated
+  patchTruncated Boolean @default(false)
+  blobUrl        String?
+
+  // --- derived classification (feature-extraction layer) ---
+  extension String?
+  language  String?
+  /// Top-level module/component the path belongs to, e.g. "src/auth".
+  module    String?
+
+  isTest               Boolean @default(false)
+  isConfig             Boolean @default(false)
+  isDependencyManifest Boolean @default(false)
+  isMigration          Boolean @default(false)
+  isInfra              Boolean @default(false)
+  isDocs               Boolean @default(false)
+  isGenerated          Boolean @default(false)
+  /// Heuristic signal: does the patch touch an exported/public symbol?
+  touchesPublicApi     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([pullRequestId, filename])
+  @@index([pullRequestId])
+  @@index([module])
+  @@map("changed_files")
+}
+
+enum FileChangeType {
+  ADDED
+  MODIFIED
+  REMOVED
+  RENAMED
+  COPIED
+  CHANGED
+  UNCHANGED
+}
+
+// =============================================================================
+// Risk analysis
+// =============================================================================
+
+/// One run of the risk pipeline against one PR head SHA. Analyses are
+/// append-only so a PR's risk can be compared over time.
+model Analysis {
+  id String @id @default(cuid())
+
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  repositoryId  String
+  repository    Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  requestedById String?
+  requestedBy   User?   @relation("AnalysisRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  /// The exact commit analysed. Re-analysing the same SHA creates a new row, so
+  /// history can show that risk dropped after the author added tests.
+  headSha String
+
+  status   AnalysisStatus @default(QUEUED)
+  /// Current pipeline stage, surfaced live over Socket.io.
+  stage    AnalysisStage?
+  progress Int            @default(0) // 0-100, coarse UI progress
+
+  // --- result ---
+  /// 0-100. Null until COMPLETED.
+  riskScore   Float?
+  riskLevel   RiskLevel?
+  /// Model's raw probability output, kept separate from the presented score.
+  probability Float?
+  confidence  Float?
+
+  /// Whether the score came from the trained XGBoost model or the transparent
+  /// heuristic fallback. Surfaced in the UI — one is never passed off as the other.
+  scoredBy     ScoringEngine @default(MODEL)
+  modelName    String?
+  modelVersion String?
+
+  /// The exact feature vector sent to the risk engine, retained for
+  /// reproducibility and for future retraining.
+  features          Json?
+  /// Feature-extractor version, so old analyses stay interpretable.
+  featureSetVersion String?
+
+  /// Human-readable summary produced by the explanation layer.
+  summary String?
+
+  // --- async execution bookkeeping ---
+  jobId       String?
+  attempts    Int       @default(0)
+  queuedAt    DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  durationMs  Int?
+
+  errorCode       String?
+  errorMessage    String?
+  /// True when the analysis finished but some inputs were degraded
+  /// (e.g. diff truncated, ML fallback used).
+  degraded        Boolean  @default(false)
+  degradedReasons String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  riskFactors     RiskFactor[]
+  recommendations Recommendation[]
+  events          AnalysisEvent[]
+  mergeDecision   MergeDecision?
+
+  @@index([repositoryId, createdAt])
+  @@index([pullRequestId, createdAt])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([requestedById])
+  @@map("analyses")
+}
+
+enum AnalysisStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AnalysisStage {
+  NORMALIZING
+  FETCHING_DIFF
+  EXTRACTING_FEATURES
+  PREDICTING
+  EXPLAINING
+  RECOMMENDING
+  PERSISTING
+  DONE
+}
+
+enum RiskLevel {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+enum ScoringEngine {
+  MODEL
+  HEURISTIC
+}
+
+/// A single contributing factor behind a risk score, derived from the model's
+/// SHAP values (or the heuristic's own weights). This is what makes the
+/// prediction legible to a developer.
+model RiskFactor {
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  /// Stable feature key, e.g. "files_changed" or "dependency_manifest_changed".
+  key   String
+  /// Developer-facing name, e.g. "Dependency manifest changed".
+  label String
+
+  /// The feature's value for this PR, as a number where meaningful.
+  value        Float?
+  /// Same value rendered for display, e.g. "43 files" or "yes".
+  displayValue String?
+
+  /// SHAP contribution in model log-odds space. Sign carries the direction.
+  shapValue    Float
+  /// Normalised 0-100 share of total explained movement, for bar widths.
+  contribution Float
+
+  direction FactorDirection
+  category  FactorCategory  @default(CHANGE_SHAPE)
+
+  /// Why this factor matters, in plain language.
+  description String?
+  /// Files/modules that made this factor fire, so the UI can link the factor
+  /// back to the diff.
+  evidence    Json?
+
+  rank Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([analysisId, key])
+  @@index([analysisId, rank])
+  @@map("risk_factors")
+}
+
+enum FactorDirection {
+  INCREASES_RISK
+  DECREASES_RISK
+  NEUTRAL
+}
+
+enum FactorCategory {
+  CHANGE_SHAPE // size, spread, churn
+  CHANGE_TYPE // tests, config, migrations, deps
+  BLAST_RADIUS // modules/components touched
+  DEPENDENCY // manifest/lockfile changes
+  DATA_LAYER // migrations, schema, queries
+  API_CONTRACT // public/exported surface
+  REPOSITORY_HISTORY // historical failure patterns
+  AUTHOR_CONTEXT // familiarity with the touched code
+  PROCESS // review coverage, PR hygiene
+}
+
+/// Concrete mitigation tied to one or more detected risk factors. Generic
+/// advice is deliberately not emitted — see analysis/recommend/rules.ts.
+model Recommendation {
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String
+  rationale   String?
+
+  category RecommendationCategory
+  priority RecommendationPriority @default(MEDIUM)
+
+  /// Feature keys that caused this recommendation to fire — the audit trail
+  /// from "why is it risky" to "what should I do".
+  triggeredByFactorKeys String[] @default([])
+  /// Specific files/modules the developer should look at.
+  targets               Json?
+
+  /// Rough effort hint so a reviewer can triage.
+  effort RecommendationEffort @default(MEDIUM)
+
+  rank Int
+
+  createdAt DateTime @default(now())
+
+  @@index([analysisId, rank])
+  @@map("recommendations")
+}
+
+enum RecommendationCategory {
+  TESTING
+  CODE_REVIEW
+  DEPENDENCY
+  DATABASE
+  API_CONTRACT
+  CONFIGURATION
+  SECURITY
+  OBSERVABILITY
+  ROLLOUT
+  SCOPE
+  DOCUMENTATION
+}
+
+enum RecommendationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationEffort {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// Append-only pipeline trace. Powers the live status view and gives a real
+/// answer to "where did the analysis fail".
+model AnalysisEvent {
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  stage      AnalysisStage
+  status     AnalysisStatus
+  message    String?
+  /// Duration of this stage.
+  durationMs Int?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([analysisId, createdAt])
+  @@map("analysis_events")
+}
+
+/// The developer's actual call on a PR, captured after they have seen the risk
+/// assessment. This closes the loop: it is the label a future retraining run
+/// would use, and it powers "how often do we override high risk".
+model MergeDecision {
+  id         String   @id @default(cuid())
+  analysisId String   @unique
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  decision MergeDecisionType
+  /// Free-text justification, required when overriding a HIGH/CRITICAL score.
+  reason   String?
+
+  /// Snapshot of the score at decision time, so later re-analysis does not
+  /// rewrite history.
+  riskScoreAtDecision Float?
+  riskLevelAtDecision RiskLevel?
+
+  /// Which recommendations the developer marked as addressed.
+  addressedRecommendationIds String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  @@index([pullRequestId])
+  @@index([userId])
+  @@map("merge_decisions")
+}
+
+enum MergeDecisionType {
+  APPROVED_MERGE
+  BLOCKED
+  DEFERRED
+  OVERRIDDEN
+  CLOSED_WITHOUT_MERGE
+}
+
+// =============================================================================
+// Timeline, deployments & analytics
+// =============================================================================
+
+/// A deployment event, optionally linked to the PR that shipped in it. This is
+/// what lets the timeline answer "which risky change preceded this outage".
+model Deployment {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  pullRequestId String?
+  pullRequest   PullRequest? @relation(fields: [pullRequestId], references: [id], onDelete: SetNull)
+
+  /// GitHub Deployments API id when the event was ingested rather than
+  /// recorded manually.
+  githubDeploymentId BigInt?
+
+  environment DeploymentEnvironment @default(PRODUCTION)
+  ref         String?
+  sha         String
+
+  status DeploymentStatus @default(PENDING)
+
+  /// Did this deployment cause a production problem? Null = unknown / not
+  /// reported. This is the closest thing to ground truth the product has, and
+  /// it is user-reported rather than inferred.
+  causedIncident   Boolean?
+  incidentSummary  String?
+  incidentSeverity IncidentSeverity?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  /// Risk score of the PR that shipped, denormalised so the timeline renders
+  /// without N+1 joins.
+  riskScoreAtDeploy Float?
+  riskLevelAtDeploy RiskLevel?
+
+  description String?
+  actorLogin  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([repositoryId, startedAt])
+  @@index([repositoryId, environment, startedAt])
+  @@index([pullRequestId])
+  @@map("deployments")
+}
+
+enum DeploymentEnvironment {
+  PRODUCTION
+  STAGING
+  PREVIEW
+  DEVELOPMENT
+}
+
+enum DeploymentStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILURE
+  ROLLED_BACK
+  CANCELLED
+}
+
+enum IncidentSeverity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+/// Daily rollup per repository. Computed by a scheduled job so the health and
+/// team dashboards read one row per day instead of aggregating every analysis
+/// on each page load.
+model RepositoryHealthSnapshot {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  /// Date at UTC midnight — the bucket key.
+  bucketDate DateTime
+
+  analysesCount      Int @default(0)
+  pullRequestsOpened Int @default(0)
+  pullRequestsMerged Int @default(0)
+
+  avgRiskScore Float?
+  maxRiskScore Float?
+  p90RiskScore Float?
+
+  lowCount      Int @default(0)
+  moderateCount Int @default(0)
+  highCount     Int @default(0)
+  criticalCount Int @default(0)
+
+  avgPrSize         Float?
+  avgFilesChanged   Float?
+  testCoverageRatio Float? // share of PRs that touched tests
+
+  deploymentsCount  Int @default(0)
+  failedDeployments Int @default(0)
+  incidentsCount    Int @default(0)
+
+  /// Recurring factor keys for the bucket, e.g. {"no_tests_touched": 7}.
+  topRiskFactors Json?
+
+  /// 0-100 composite. The formula lives in modules/analytics/health.ts and is
+  /// documented there; it is a product heuristic, not a model output.
+  healthScore Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([repositoryId, bucketDate])
+  @@index([repositoryId, bucketDate])
+  @@map("repository_health_snapshots")
+}
+
+// =============================================================================
+// Notifications
+// =============================================================================
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type     NotificationType
+  severity NotificationSeverity @default(INFO)
+
+  title String
+  body  String?
+
+  /// Deep link into the app, e.g. "/analyses/abc123".
+  href String?
+
+  /// Loose references so a notification can be filtered by subject without a
+  /// hard FK per type.
+  repositoryId  String?
+  pullRequestId String?
+  analysisId    String?
+
+  metadata Json?
+
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([analysisId])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  ANALYSIS_QUEUED
+  ANALYSIS_COMPLETED
+  ANALYSIS_FAILED
+  HIGH_RISK_PR
+  MERGE_DECISION_RECORDED
+  DEPLOYMENT_RECORDED
+  DEPLOYMENT_FAILED
+  REPOSITORY_CONNECTED
+  REPOSITORY_SYNC_FAILED
+  TEAM_MEMBER_ADDED
+  SYSTEM
+}
+
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  CRITICAL
+}

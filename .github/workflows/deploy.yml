@@ -1,0 +1,223 @@
+name: Deploy
+
+# Builds the three images, pushes them to GHCR, then rolls the EC2 instance
+# forward over SSH.
+#
+# Why build here rather than on the instance: a t3.micro/t3.small cannot build a
+# Next.js bundle without running out of memory, and building on the box means a
+# failed build takes the site down instead of just failing the pipeline.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#
+#   EC2_HOST              public DNS or IP of the instance
+#   EC2_USER              ssh user (ec2-user on Amazon Linux, ubuntu on Ubuntu)
+#   EC2_SSH_KEY           the *private* key, full PEM contents
+#   EC2_APP_DIR           optional, defaults to /opt/bugdna
+#
+# GHCR needs no extra secret — GITHUB_TOKEN is used, which is why the job
+# declares `packages: write`.
+#
+# See docs/DEPLOYMENT.md for the full runbook.
+
+on:
+  push:
+    branches: [main]
+    # Documentation-only changes should not trigger a deploy.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (defaults to the commit SHA)"
+        required: false
+        type: string
+
+concurrency:
+  # Never let two deploys run at once — they would race on migrations.
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # Lowercased below: GHCR rejects uppercase repository paths, and the GitHub
+  # account here is `Teestasarkar`.
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  # ==========================================================================
+  # Build and push
+  # ==========================================================================
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the image tag and namespace
+        id: meta
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_SHA::12}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # GHCR paths must be lowercase.
+          echo "namespace=$(echo '${{ env.IMAGE_NAMESPACE }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "Deploying tag: $TAG"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- API + worker (one image, two commands) --------------------------
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-api:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      # --- Web ------------------------------------------------------------
+      # NEXT_PUBLIC_* is inlined at build time, so the public URLs must be known
+      # here. That is the trade for not shipping a runtime config fetch on every
+      # page load.
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.PUBLIC_API_URL || 'http://localhost:4000' }}
+            NEXT_PUBLIC_WS_URL=${{ vars.PUBLIC_WS_URL || 'http://localhost:4000' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-web:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      # --- Risk service ---------------------------------------------------
+      - name: Build and push risk service image
+        uses: docker/build-push-action@v6
+        with:
+          # Root context: the image needs contracts/feature-spec.json.
+          context: .
+          file: ./ml-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-ml:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.namespace }}/bugdna-ml:latest
+          cache-from: type=gha,scope=ml
+          cache-to: type=gha,mode=max,scope=ml
+
+  # ==========================================================================
+  # Deploy to EC2
+  # ==========================================================================
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Guard on required secrets
+        # Fails with a readable message rather than a cryptic ssh error.
+        run: |
+          missing=""
+          [ -n "${{ secrets.EC2_HOST }}" ] || missing="$missing EC2_HOST"
+          [ -n "${{ secrets.EC2_USER }}" ] || missing="$missing EC2_USER"
+          [ -n "${{ secrets.EC2_SSH_KEY }}" ] || missing="$missing EC2_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing"
+            echo "Set them under Settings -> Secrets and variables -> Actions."
+            echo "See docs/DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pin the host key on first contact rather than disabling checking.
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+          APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/bugdna' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "bash -se" <<ENDSSH
+          set -euo pipefail
+          cd "${APP_DIR}"
+
+          echo "==> Fetching the deploy scripts and compose files"
+          git fetch --all --prune
+          git checkout ${{ github.sha }} -- \
+            docker-compose.prod.yml \
+            infra/ \
+            contracts/ 2>/dev/null || git pull --ff-only
+
+          echo "==> Authenticating to GHCR"
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          echo "==> Deploying tag ${TAG}"
+          # deploy.sh takes the backup, pulls, rolls forward, verifies readiness
+          # and rolls back automatically if the stack does not come up.
+          chmod +x ./infra/ec2/deploy.sh
+          ./infra/ec2/deploy.sh "${TAG}"
+          ENDSSH
+
+      - name: Verify the deployment from outside
+        # The instance verified itself; this confirms it is reachable publicly,
+        # which is a different failure (security group, Nginx, DNS).
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 \
+              "http://${{ secrets.EC2_HOST }}/api/v1/system/ready" > /tmp/ready.json; then
+              cat /tmp/ready.json
+              exit 0
+            fi
+            echo "attempt $i failed, retrying..."
+            sleep 10
+          done
+          echo "::error::the deployment is not reachable from the internet"
+          echo "Check the EC2 security group allows inbound 80/443, and that Nginx is running."
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Deployment"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tag | \`${{ needs.build.outputs.tag }}\` |"
+            echo "| Commit | ${{ github.sha }} |"
+            echo "| Host | ${{ secrets.EC2_HOST }} |"
+            echo "| Status | ${{ job.status }} |"
+            echo ""
+            echo "Roll back on the instance with:"
+            echo '```'
+            echo "cd /opt/bugdna && ./infra/ec2/deploy.sh --rollback"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

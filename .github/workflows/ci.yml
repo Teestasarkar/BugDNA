@@ -1,0 +1,392 @@
+name: CI
+
+# Runs on every push and pull request. The jobs are deliberately independent so
+# a frontend type error does not hide a backend test failure — you get all the
+# information from one run rather than fixing one thing at a time.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref. Saves CI minutes and
+# means the reported status always reflects the newest commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ==========================================================================
+  # Feature contract
+  # ==========================================================================
+  # The contract is generated from the TypeScript feature registry and consumed
+  # by the Python service. If someone edits the registry without regenerating,
+  # the two services silently disagree about the feature vector — which shows up
+  # as quietly wrong risk scores, not an error. So this gate runs first.
+  contract:
+    name: Feature contract is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify contracts/feature-spec.json matches the registry
+        working-directory: backend
+        run: npm run contracts:check
+
+  # ==========================================================================
+  # Backend
+  # ==========================================================================
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    # Real Postgres and Redis rather than mocks: Prisma migrations and the
+    # tenancy queries are exactly the things worth exercising against the real
+    # engines.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bugdna
+          POSTGRES_PASSWORD: bugdna_ci
+          POSTGRES_DB: bugdna_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bugdna -d bugdna_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://bugdna:bugdna_ci@localhost:5432/bugdna_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      # Deterministic CI values. Real secrets are never needed for typecheck,
+      # lint, migrate or unit tests.
+      SESSION_SECRET: ci_session_secret_at_least_32_characters_long
+      TOKEN_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      ML_SERVICE_TOKEN: ci_internal_token
+      GITHUB_MODE: mock
+      LOG_LEVEL: warn
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        working-directory: backend
+        run: npx prisma validate
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Test
+        working-directory: backend
+        run: npm test
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+  # ==========================================================================
+  # Risk service
+  # ==========================================================================
+  ml-service:
+    name: Risk service
+    runs-on: ubuntu-latest
+    # Needs the contract to exist before its tests can align a feature vector.
+    needs: contract
+
+    env:
+      CONTRACTS_DIR: ${{ github.workspace }}/contracts
+      MODEL_DIR: ${{ github.workspace }}/ml-service/models
+      LOG_LEVEL: warning
+      LOG_FORMAT: json
+      # Exercises the auth path rather than skipping it.
+      ML_SERVICE_TOKEN: ci_internal_token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ml-service/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: ml-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: ml-service
+        run: ruff check app training tests
+
+      # Runs the suite twice, on purpose. The service has two scoring engines
+      # and both must satisfy the same behavioural contract — a docs typo scores
+      # lower than a destructive migration either way.
+      - name: Test against the heuristic fallback
+        working-directory: ml-service
+        run: pytest tests -q
+
+      - name: Train a bootstrap model
+        working-directory: ml-service
+        run: |
+          python -m training.generate_bootstrap_dataset --rows 8000 --noise 0.3
+          python -m training.train --version 0.0.0-ci
+
+      - name: Test against the trained XGBoost model
+        working-directory: ml-service
+        run: pytest tests -q
+
+      - name: Assert the artifact makes no unmeasured accuracy claim
+        working-directory: ml-service
+        # A synthetic model must report metrics: null. If this ever regresses,
+        # the product would be quoting an accuracy figure derived from data
+        # BugDNA invented.
+        run: |
+          python - <<'PY'
+          import json, glob, sys
+          paths = glob.glob("models/*-v0.0.0-ci.meta.json")
+          assert paths, "no metadata sidecar was written"
+          meta = json.load(open(paths[0], encoding="utf-8"))
+          assert meta["synthetic"] is True, "bootstrap artifact not marked synthetic"
+          assert meta["metrics"] is None, (
+              "a synthetic model reported accuracy metrics: %r" % (meta["metrics"],)
+          )
+          assert "syntheticHoldout" in meta, "holdout numbers were not recorded separately"
+          print("ok: synthetic artifact makes no accuracy claim")
+          PY
+
+  # ==========================================================================
+  # Frontend
+  # ==========================================================================
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: frontend
+        env:
+          # Build-time only. NEXT_PUBLIC_* is inlined into the bundle, so the
+          # real values are supplied when the deploy image is built.
+          NEXT_PUBLIC_API_URL: http://localhost:4000
+          NEXT_PUBLIC_WS_URL: http://localhost:4000
+        run: npm run build
+
+  # ==========================================================================
+  # Container builds
+  # ==========================================================================
+  # Builds all three images without pushing, so a broken Dockerfile fails on the
+  # pull request rather than at deploy time.
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, ml-service]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:4000
+            NEXT_PUBLIC_WS_URL=http://localhost:4000
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Build risk service image
+        uses: docker/build-push-action@v6
+        with:
+          # Root context: the image needs contracts/feature-spec.json.
+          context: .
+          file: ./ml-service/Dockerfile
+          push: false
+          cache-from: type=gha,scope=ml
+          cache-to: type=gha,mode=max,scope=ml
+
+  # ==========================================================================
+  # End-to-end smoke test
+  # ==========================================================================
+  # Brings the whole stack up with docker compose and drives the real pipeline:
+  # seed a tenant, then assert the risk engine actually distinguishes a safe
+  # change from a dangerous one. This is the test that would catch a regression
+  # the unit tests cannot — a broken feature extractor, a contract mismatch, a
+  # queue that never drains.
+  e2e:
+    name: End-to-end smoke test
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, ml-service]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          # Real generated secrets, so the app boots in its production code path
+          # rather than the development fallback.
+          sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(openssl rand -hex 48)|" .env
+          sed -i "s|^TOKEN_ENCRYPTION_KEY=.*|TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)|" .env
+          sed -i "s|^ML_SERVICE_TOKEN=.*|ML_SERVICE_TOKEN=$(openssl rand -hex 24)|" .env
+          # No GitHub credentials in CI, so run the whole flow on fixtures.
+          sed -i "s|^GITHUB_MODE=.*|GITHUB_MODE=mock|" .env
+          # Keep the bootstrap training quick.
+          echo "BOOTSTRAP_ROWS=6000" >> .env
+
+      - name: Start the stack
+        run: docker compose up -d --build
+
+      - name: Wait for readiness
+        # The risk service trains a bootstrap model on first boot, so allow for it.
+        timeout-minutes: 8
+        run: |
+          for i in $(seq 1 96); do
+            if curl -fsS http://localhost:4000/api/v1/system/ready > /tmp/ready.json 2>/dev/null; then
+              status=$(jq -r '.status' /tmp/ready.json)
+              echo "readiness: $status"
+              if [ "$status" = "ok" ]; then exit 0; fi
+            fi
+            sleep 5
+          done
+          echo "::error::stack did not become ready"
+          docker compose logs --tail=120
+          exit 1
+
+      - name: Seed the demo tenant
+        run: docker compose exec -T api npx tsx prisma/seed.ts
+
+      - name: Assert the pipeline produced real analyses
+        run: |
+          docker compose exec -T postgres psql -U bugdna -d bugdna -tAc \
+            "SELECT count(*) FROM analyses WHERE status='COMPLETED';" > /tmp/count.txt
+          count=$(tr -d '[:space:]' < /tmp/count.txt)
+          echo "completed analyses: $count"
+          if [ "$count" -lt 10 ]; then
+            echo "::error::expected at least 10 completed analyses, got $count"
+            docker compose logs --tail=120 api worker ml-service
+            exit 1
+          fi
+
+      - name: Assert risk actually discriminates
+        # The single most important behavioural guarantee in the product: a
+        # docs-only change must score lower than a destructive migration. If
+        # this fails, the risk signal is broken however green everything else is.
+        run: |
+          docker compose exec -T postgres psql -U bugdna -d bugdna -tAc \
+            "SELECT round(max(a.\"riskScore\")::numeric - min(a.\"riskScore\")::numeric)
+             FROM analyses a WHERE a.status='COMPLETED';" > /tmp/spread.txt
+          spread=$(tr -d '[:space:]' < /tmp/spread.txt)
+          echo "risk score spread across seeded pull requests: $spread points"
+          if [ "${spread%.*}" -lt 20 ]; then
+            echo "::error::risk scores span only $spread points - the engine is not discriminating"
+            exit 1
+          fi
+
+      - name: Assert explanations and recommendations exist
+        run: |
+          docker compose exec -T postgres psql -U bugdna -d bugdna -tAc \
+            "SELECT count(*) FROM risk_factors;" > /tmp/factors.txt
+          docker compose exec -T postgres psql -U bugdna -d bugdna -tAc \
+            "SELECT count(*) FROM recommendations;" > /tmp/recs.txt
+          factors=$(tr -d '[:space:]' < /tmp/factors.txt)
+          recs=$(tr -d '[:space:]' < /tmp/recs.txt)
+          echo "risk factors: $factors, recommendations: $recs"
+          [ "$factors" -gt 50 ] || { echo "::error::too few risk factors persisted"; exit 1; }
+          [ "$recs" -gt 10 ] || { echo "::error::too few recommendations persisted"; exit 1; }
+
+      - name: Check the web app serves
+        run: |
+          curl -fsS http://localhost:3000/api/healthz | jq -e '.status == "ok"'
+          curl -fsS http://localhost:3000 | grep -qi "bugdna"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
