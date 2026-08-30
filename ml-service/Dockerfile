@@ -77,4 +77,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "none"]
+# Wrapped in a shell so the port is resolved at start time. `PORT` is what
+# every PaaS injects and routes to; `ML_PORT` is our own name for it; 8000 is
+# the Compose default. A hardcoded port here would work on Render only
+# because it sniffs listening sockets, which is not a guarantee to lean on.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-${ML_PORT:-8000}} --log-config none"]

@@ -183,7 +183,16 @@ export type RawEnv = z.infer<typeof schema>;
 // ---------------------------------------------------------------------------
 
 function parseEnv(): RawEnv {
-  const result = schema.safeParse(process.env);
+  // Every PaaS (Render, Railway, Fly, Heroku, Cloud Run) injects the port it
+  // wants the process to listen on as `PORT`, and routes to nothing else. An
+  // explicit API_PORT still wins, so Docker Compose and local development are
+  // unaffected — this only fills in the blank a platform left.
+  const source: NodeJS.ProcessEnv = { ...process.env };
+  if (source.API_PORT === undefined && source.PORT !== undefined) {
+    source.API_PORT = source.PORT;
+  }
+
+  const result = schema.safeParse(source);
 
   if (!result.success) {
     const details = result.error.issues

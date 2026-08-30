@@ -3,9 +3,10 @@
 # =============================================================================
 # Import as a Blueprint: Render -> New -> Blueprint -> point at this repo.
 #
-# Render's free tier only gives away **web services**. Private services
-# (`pserv`) and background workers are paid products. So this file deviates from
-# the production architecture in exactly two documented ways:
+# Render's free tier gives away **web services** and a **Key Value (Redis)**
+# instance. Private services (`pserv`) and background workers are paid products.
+# So this file deviates from the production architecture in exactly two
+# documented ways:
 #
 #   1. The analysis worker runs INSIDE the API process (RUN_WORKER_IN_API=true)
 #      instead of as its own dyno. Trade: a wedged analysis can affect API
@@ -25,6 +26,25 @@
 
 services:
   # ---------------------------------------------------------------------------
+  # Redis — cache, transient analysis state, BullMQ
+  # ---------------------------------------------------------------------------
+  # `noeviction` is not a preference, it is a requirement: BullMQ stores job
+  # state in Redis keys, and an eviction policy that discards them silently
+  # loses queued analyses. Render's free plan is 25 MB with no persistence
+  # across restarts — acceptable here *only* because Redis is never the source
+  # of truth in this system. A flushed Redis costs a cold cache and any
+  # in-flight job, both of which are recoverable from Postgres.
+  #
+  # An empty ipAllowList means no public access at all: reachable only from the
+  # other services in this blueprint.
+  - type: redis
+    name: bugdna-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+  # ---------------------------------------------------------------------------
   # Risk service — XGBoost + SHAP
   # ---------------------------------------------------------------------------
   - type: web
@@ -43,12 +63,8 @@ services:
         value: json
       - key: LOG_LEVEL
         value: info
-      # Render injects PORT and expects the service to listen on it.
-      - key: ML_PORT
-        fromService:
-          name: bugdna-ml
-          type: web
-          property: port
+      # No port wiring needed: Render injects PORT, and both images resolve
+      # PORT -> ML_PORT/API_PORT -> default at start time.
       - key: MODEL_DIR
         value: /app/models
       - key: CONTRACTS_DIR
@@ -109,9 +125,15 @@ services:
       # -pooler host and connection_limit low; Neon's free tier caps connections.
       - key: DATABASE_URL
         sync: false
-      # Upstash: the rediss:// URL (TLS), not the REST endpoint.
+      # Wired from the Key Value service above. To use an external provider
+      # (Upstash, ElastiCache) instead, delete this block and the `redis`
+      # service, then set REDIS_URL manually to the provider's rediss:// URL —
+      # the TLS one, not a REST endpoint; ioredis speaks the wire protocol.
       - key: REDIS_URL
-        sync: false
+        fromService:
+          name: bugdna-redis
+          type: redis
+          property: connectionString
 
       # --- secrets ---
       - key: SESSION_SECRET
@@ -124,17 +146,25 @@ services:
         sync: false
 
       # --- wiring ---
+      # These three are set by hand rather than with `fromService`, and the
+      # reason is not laziness: `fromService` can only yield a bare hostname
+      # (`bugdna-ml.onrender.com`), while the backend validates each of these as
+      # a full URL and refuses to boot without a scheme. Render offers no string
+      # interpolation, so there is no way to prepend `https://` in this file.
+      #
+      # Set after the first deploy, when Render has assigned the subdomains:
+      #   ML_SERVICE_URL  https://bugdna-ml.onrender.com
+      #   API_URL         https://bugdna-api.onrender.com
+      #   APP_URL         https://<your-project>.vercel.app
+      #   CORS_ORIGINS    https://<your-project>.vercel.app
+      #
+      # CORS_ORIGINS is an exact-match allowlist, so it must carry the scheme
+      # and no trailing slash — a browser Origin header has neither a path nor a
+      # trailing slash, and the comparison is literal.
       - key: ML_SERVICE_URL
-        fromService:
-          name: bugdna-ml
-          type: web
-          property: hostport
+        sync: false
       - key: API_URL
-        fromService:
-          name: bugdna-api
-          type: web
-          property: host
-      # The Vercel origin, e.g. https://bug-dna.vercel.app
+        sync: false
       - key: APP_URL
         sync: false
       - key: CORS_ORIGINS
