@@ -77,8 +77,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
+# `--log-config` is deliberately absent. `log_config=None` is how the intent is
+# expressed in Python (see the __main__ block in app/main.py), but the CLI flag
+# takes a *file path*, so `--log-config none` made uvicorn look for a file
+# called "none" and exit 2 before binding a port. It was also redundant:
+# configure_logging() runs when app.main is imported, which is after uvicorn
+# applies its own config, and it already clears the uvicorn handlers and sets
+# propagate=True so every line shares one format.
+#
 # Wrapped in a shell so the port is resolved at start time. `PORT` is what
 # every PaaS injects and routes to; `ML_PORT` is our own name for it; 8000 is
 # the Compose default. A hardcoded port here would work on Render only
 # because it sniffs listening sockets, which is not a guarantee to lean on.
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-${ML_PORT:-8000}} --log-config none"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-${ML_PORT:-8000}}"]

@@ -94,7 +94,9 @@ services:
     dockerfilePath: ./backend/Dockerfile
     healthCheckPath: /healthz
     # Applies migrations, then serves. Exactly one service may do this.
-    dockerCommand: sh -c "npx prisma migrate deploy && node dist/server.js"
+    # No `sh -c` wrapper: Render already evaluates this in a shell, so wrapping
+    # it makes the whole string the command *name* and the container exits 127.
+    dockerCommand: npx prisma migrate deploy && node dist/server.js
     envVars:
       - key: NODE_ENV
         value: production
