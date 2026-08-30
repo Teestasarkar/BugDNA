@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 16 via Prisma 6. **20 models, 14 enums.** Full schema:
+PostgreSQL 16 via Prisma 6. **16 models, 18 enums.** Full schema:
 [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma).
 
 ## Tenancy shape

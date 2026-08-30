@@ -16,7 +16,11 @@ import { checkDatabase, disconnectPrisma } from "./lib/prisma";
 import { checkRedis, disconnectRedis } from "./lib/redis";
 import { checkMlService } from "./modules/ml/ml.client";
 import { initRealtime, shutdownRealtime } from "./realtime/socket";
-import { closeQueues } from "./queue/queues";
+import { closeQueues, initQueueEvents } from "./queue/queues";
+import {
+  startAnalysisWorker,
+  stopAnalysisWorker,
+} from "./queue/processors/analysis.processor";
 import { FEATURE_KEYS } from "./modules/analysis/features/registry";
 import { FEATURE_SET_VERSION } from "./config/constants";
 
@@ -41,6 +45,21 @@ async function main(): Promise<void> {
   // exits because Postgres is 200ms behind it in the startup order is a worse
   // failure mode than one that starts and reports itself unready.
   void reportDependencies();
+
+  // Free hosting tiers only give away web services, so the worker can be
+  // collapsed into this process. Logged at warn level because it changes the
+  // failure characteristics of the deployment — see RUN_WORKER_IN_API in
+  // config/env.ts.
+  if (env.RUN_WORKER_IN_API) {
+    logger.warn(
+      { concurrency: env.ANALYSIS_CONCURRENCY },
+      "RUN_WORKER_IN_API is set: running the analysis worker inside the API " +
+        "process. Suitable for small or demo deployments; run a separate worker " +
+        "wherever possible.",
+    );
+    startAnalysisWorker();
+    initQueueEvents();
+  }
 
   server.listen(env.API_PORT, () => {
     logger.info(
@@ -126,7 +145,13 @@ function installShutdownHandlers(server: http.Server): void {
       });
       logger.info("http server closed");
 
-      // 2. Close realtime, then the shared infrastructure.
+      // 2. Drain the in-process worker (if any), then realtime, then the
+      //    shared infrastructure. Order matters: the worker must finish before
+      //    its queue connection is closed under it.
+      if (env.RUN_WORKER_IN_API) {
+        logger.info("draining in-process analysis worker");
+        await stopAnalysisWorker();
+      }
       await shutdownRealtime();
       await closeQueues();
       await Promise.allSettled([disconnectPrisma(), disconnectRedis()]);

@@ -188,7 +188,7 @@ The short version:
 
 ```
 backend/          Express 5 + Prisma + Socket.io + BullMQ   (58 files, ~16k lines)
-  prisma/         schema (20 models, 14 enums) + seed
+  prisma/         schema (16 models, 18 enums) + seed
   src/modules/    auth, github, repositories, pulls, analysis, ml,
                   analytics, teams, notifications, search, timeline, system
   src/queue/      BullMQ queue + the analysis worker

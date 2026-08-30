@@ -159,6 +159,21 @@ const schema = z.object({
    * endpoint entirely.
    */
   ENABLE_DEMO_LOGIN: bool(true),
+
+  /**
+   * Run the analysis worker inside the API process.
+   *
+   * The worker normally runs as its own process — see docs/Architecture.md for
+   * why that separation is right at any real scale. But free hosting tiers
+   * (Render, Koyeb, Fly) only give away *web* services; a dedicated background
+   * worker is a paid product everywhere.
+   *
+   * So this flag exists to collapse the two onto one dyno for small or demo
+   * deployments. It is an honest trade, not a hidden default: a wedged analysis
+   * can now affect API latency, and the two can no longer scale independently.
+   * Leave it false wherever a separate worker process is affordable.
+   */
+  RUN_WORKER_IN_API: bool(false),
 });
 
 export type RawEnv = z.infer<typeof schema>;
