@@ -59,7 +59,17 @@ ENV NODE_ENV=production \
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
-COPY --chown=node:node package.json ./
+# prisma/seed.ts imports from ../src, and it is run with tsx rather than
+# compiled, so the sources have to be present for the documented seed command
+# (`docker compose exec api npx tsx prisma/seed.ts`) to work at all.
+#
+# The honest trade: this image is not minimal. node_modules is copied from the
+# builder stage without pruning, so tsx, typescript and vitest are already
+# inside it; adding ~1 MB of TypeScript alongside them is not what makes it
+# large. A genuinely slim image would prune devDependencies, compile the seed
+# into dist/, and drop both — worth doing before this carries real traffic.
+COPY --from=builder --chown=node:node /app/src ./src
+COPY --chown=node:node package.json tsconfig.json ./
 COPY --chown=node:node docker-entrypoint.sh ./
 RUN chmod +x ./docker-entrypoint.sh
 

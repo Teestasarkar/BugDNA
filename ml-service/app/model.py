@@ -192,22 +192,48 @@ class RiskModel:
                 self._explainer = explainer
                 self._metadata = metadata
 
-                logger.info(
-                    "model loaded",
-                    extra={
-                        "name": metadata.name,
-                        "version": metadata.version,
-                        "feature_set_version": metadata.feature_set_version,
-                        "features": len(metadata.feature_names),
-                        "synthetic": metadata.synthetic,
-                        "has_metrics": metadata.metrics is not None,
-                        "explainer": explainer is not None,
-                    },
-                )
+                self._log_loaded(metadata, explainer)
 
             except Exception as exc:
                 self._load_error = f"failed to load {model_path.name}: {exc}"
                 logger.exception("model load failed")
+
+    @staticmethod
+    def _log_loaded(metadata: ModelMetadata, explainer: object | None) -> None:
+        """
+        Announce a successful load.
+
+        Isolated in its own try/except on purpose. The booster, explainer and
+        metadata are already committed by the time this runs, so a fault *here*
+        is a logging fault — but it used to be caught by the caller's
+        `except Exception`, which set `_load_error` and logged "model load
+        failed". The service then served the heuristic fallback while a
+        perfectly good XGBoost model sat loaded in memory, and the log said the
+        model could not be read.
+
+        That is exactly what happened: `extra={"name": ...}` collides with
+        `LogRecord.name`, which stdlib logging refuses to overwrite —
+        `KeyError: Attempt to overwrite 'name' in LogRecord`. Hence `model_name`
+        below, and hence this guard, because the next reserved-key collision
+        should degrade a log line and nothing else.
+        """
+        try:
+            logger.info(
+                "model loaded",
+                extra={
+                    "model_name": metadata.name,
+                    "version": metadata.version,
+                    "feature_set_version": metadata.feature_set_version,
+                    "features": len(metadata.feature_names),
+                    "synthetic": metadata.synthetic,
+                    "has_metrics": metadata.metrics is not None,
+                    "explainer": explainer is not None,
+                },
+            )
+        except Exception:
+            logger.warning(
+                "model loaded, but writing the load log line failed", exc_info=True
+            )
 
     def _resolve_artifact(self) -> tuple[Path, Path] | None:
         """Find the artifact to serve, honouring MODEL_VERSION."""

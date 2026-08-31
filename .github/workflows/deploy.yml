@@ -47,11 +47,39 @@ env:
 
 jobs:
   # ==========================================================================
+  # Preflight
+  # ==========================================================================
+  # An EC2 target is optional. Without one this workflow used to fail on every
+  # push, which is worse than useless: a permanently red pipeline trains people
+  # to ignore the pipeline. "No target configured" is not a failure, so this
+  # decides once and the real jobs skip cleanly.
+  #
+  # It has to be a separate job because a job-level `if:` cannot read `secrets`;
+  # only a step can, and a step can publish the answer as an output.
+  preflight:
+    name: Check for a deploy target
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.EC2_HOST }}" ]             && [ -n "${{ secrets.EC2_USER }}" ]             && [ -n "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::EC2 target configured; building and deploying."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No EC2 secrets set, so the EC2 deploy is skipped.           This is expected: the live deployment runs on Render and Vercel, which           deploy from their own git integrations (infra/paas/render.yaml). To use           EC2 instead, set EC2_HOST, EC2_USER and EC2_SSH_KEY under Settings ->           Secrets and variables -> Actions. See docs/DEPLOYMENT.md."
+          fi
+
+  # ==========================================================================
   # Build and push
   # ==========================================================================
   build:
     name: Build and push images
     runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.configured == 'true'
 
     permissions:
       contents: read
@@ -132,24 +160,14 @@ jobs:
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.configured == 'true'
     environment: production
 
     steps:
-      - name: Guard on required secrets
-        # Fails with a readable message rather than a cryptic ssh error.
-        run: |
-          missing=""
-          [ -n "${{ secrets.EC2_HOST }}" ] || missing="$missing EC2_HOST"
-          [ -n "${{ secrets.EC2_USER }}" ] || missing="$missing EC2_USER"
-          [ -n "${{ secrets.EC2_SSH_KEY }}" ] || missing="$missing EC2_SSH_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error::missing repository secrets:$missing"
-            echo "Set them under Settings -> Secrets and variables -> Actions."
-            echo "See docs/DEPLOYMENT.md."
-            exit 1
-          fi
-
+      # No secrets guard here: preflight has already established that all three
+      # are present, and duplicating the check would only be another place to
+      # forget to update.
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
