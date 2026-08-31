@@ -5,6 +5,11 @@
  * params with Zod and **replaces** them with the parsed result, so downstream
  * code works with coerced, typed values (a query string `?page=2` arrives as the
  * number 2) and unknown keys are stripped rather than silently forwarded.
+ *
+ * Routes rely on that replacement completely: they cast `req.query` to the
+ * schema's output type rather than re-reading raw strings. If the replacement
+ * does not take effect the cast is a lie and every default silently becomes
+ * undefined, so the mechanism is covered by tests in tests/validate.test.ts.
  */
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { z, type ZodTypeAny } from "zod";
@@ -44,12 +49,22 @@ export function validate(schemas: ValidationSchemas): RequestHandler {
     if (schemas.query) {
       const result = schemas.query.safeParse(req.query);
       if (result.success) {
-        // Express 5 makes req.query a getter, so assigning to it throws.
-        // Mutating in place keeps the parsed/coerced values without fighting it.
-        for (const key of Object.keys(req.query)) {
-          delete (req.query as Record<string, unknown>)[key];
-        }
-        Object.assign(req.query, result.data);
+        // Express 5 defines `query` as an accessor that re-parses the URL on
+        // *every* read, so it returns a fresh object each time. That makes both
+        // obvious approaches wrong: plain assignment does not stick (there is no
+        // setter), and mutating in place mutates a throwaway object. The parsed
+        // values, including every default and coercion, were being discarded —
+        // which turned `?page` defaults into `undefined` and, downstream,
+        // `(page - 1) * perPage` into NaN.
+        //
+        // Replacing the accessor with an own value property is the supported
+        // fix: reads are stable, and downstream code gets what Zod produced.
+        Object.defineProperty(req, "query", {
+          value: result.data,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
       } else {
         issues.push(...collect("query", result.error));
       }
@@ -97,9 +112,21 @@ export const paginationSchema = z.object({
 
 export type Pagination = z.infer<typeof paginationSchema>;
 
-/** Convert page/perPage into Prisma's skip/take. */
+/**
+ * Convert page/perPage into Prisma's skip/take.
+ *
+ * The finiteness guards are deliberate. Zod makes both values numbers, so on
+ * the validated path they are redundant — but this function is the only
+ * producer of `skip`, and a NaN escaping it is close to undiagnosable: Prisma
+ * serialises NaN as absent and reports "Argument `skip` is missing" from a call
+ * site that visibly passes `skip`. `?? 0` downstream does not help, because
+ * `??` only catches null and undefined. Clamping here makes the bad value
+ * unrepresentable at its source instead.
+ */
 export function toSkipTake(p: Pagination): { skip: number; take: number } {
-  return { skip: (p.page - 1) * p.perPage, take: p.perPage };
+  const page = Number.isFinite(p.page) ? p.page : PAGINATION.defaultPage;
+  const perPage = Number.isFinite(p.perPage) ? p.perPage : PAGINATION.defaultPerPage;
+  return { skip: (page - 1) * perPage, take: perPage };
 }
 
 /** Trimmed, length-capped free text — used for search queries and reasons. */
