@@ -8,7 +8,22 @@ Reads a pull request's diff before it merges, estimates the chance it causes a
 production problem, explains why in language a developer can act on, and records
 what you decided.
 
+**[bugdna.vercel.app](https://bugdna.vercel.app)** &nbsp;·&nbsp;
+[API](https://bugdna-api.onrender.com/api/v1/system/ready) &nbsp;·&nbsp;
+[Risk service](https://bugdna-ml.onrender.com/docs)
+
 </div>
+
+> The live deployment runs on free tiers: **Vercel** (web), **Render** (API and
+> risk service), **Neon** (Postgres), **Render Key Value** (Redis). Render free
+> services sleep after ~15 minutes idle, so the first request can take 30-50s
+> while two containers cold-start — the risk service loads an XGBoost model and
+> builds a SHAP explainer on boot. Open the two links above first and let them
+> wake before using the app. It also differs from the documented production
+> topology in two ways, both deliberate and both noted in
+> [`infra/paas/render.yaml`](infra/paas/render.yaml): the analysis worker runs
+> inside the API process, and the risk service is publicly routable behind a
+> shared-secret header rather than network-isolated.
 
 ---
 
@@ -25,16 +40,42 @@ a dashboard bolted on — the score is produced by a real gradient-boosted model
 in a separate Python service, the explanation is real tree SHAP, and every
 recommendation is triggered by a specific signal found in your diff.
 
-**Measured behaviour** from the seeded demo tenant, with the shipped model:
+### What it actually scores
+
+Read off the live deployment, seeded tenant, shipped model — one row per
+distinct pull request, lowest first:
 
 | Change | Score | Band |
 |---|---|---|
-| Documentation typo | 17 | LOW |
-| Well-tested feature | 18 | LOW |
-| Dependency bump | 21 | LOW |
-| Large refactor, no tests | 55 | MODERATE |
-| Destructive migration, no tests | **72** | **HIGH** |
-| …the same PR with tests added | 70 | HIGH |
+| Remove an N+1 query | 17 | LOW |
+| Batch invoice line loading | 18 | LOW |
+| Mid-cycle subscription upgrades | 23 | LOW |
+| Hotfix: double-charging on retried webhooks | 25 | LOW |
+| Simplify auth middleware | 29 | LOW |
+| Documentation typo | 31 | LOW |
+| Relax role checks during a rollout | 35 | MODERATE |
+| Drop a legacy audit table | 37 | MODERATE |
+| Consolidate payment columns (breaking) | 38 | MODERATE |
+| Upgrade stripe and pg | 50 | MODERATE |
+| Extract a retry policy from callers | 55 | MODERATE |
+
+Two things that table is honest about, and both matter more than the numbers:
+
+**The spread is real but the ordering is not validated.** Scores span 17 to 55
+— the pipeline clearly separates a query optimisation from a large refactor. But
+a documentation typo at 31 outranks a webhook hotfix at 25, and a dependency
+bump at 50 outranks a destructive migration at 37. That is not a defensible
+ranking of production risk. It is what a model fitted on **synthetic** data
+produces, which is exactly why `/v1/model/info` reports `metrics: null` and why
+the product never claims an accuracy figure. Train on real deployment outcomes
+and this table becomes meaningful; until then it demonstrates that the machinery
+works, not that the judgement does.
+
+**Nothing here reaches HIGH or CRITICAL,** because nothing in the fixtures
+earns it. The bands are a product decision (60+ and 80+); the model is not
+tuned to reach them on this data, and inflating the fixtures to produce a red
+badge for a screenshot would be the exact dishonesty this project is meant to
+avoid.
 
 ---
 

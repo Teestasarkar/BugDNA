@@ -34,8 +34,20 @@ export type RiskLevelName = (typeof RISK_BANDS)[number]["level"];
 /** Map a 0-100 score onto its band. */
 export function scoreToRiskLevel(score: number): RiskLevelName {
   const clamped = Math.max(0, Math.min(100, score));
+
+  // The bands above are inclusive *integer* ranges (0-34, 35-59, ...) while
+  // riskScore is a Float. Banding the raw value left three gaps — 34 < s < 35,
+  // 59 < s < 60, 79 < s < 80 — where no band matched and the fallthrough below
+  // returned CRITICAL. A score of 34.9, barely out of LOW, was reported as the
+  // most severe label the product has.
+  //
+  // Rounding first closes the gaps and has a second benefit: every surface
+  // displays the score rounded, so the number a user reads and the band they
+  // are shown are now derived from the same integer and cannot disagree.
+  const banded = Math.round(clamped);
+
   for (const band of RISK_BANDS) {
-    if (clamped >= band.min && clamped <= band.max) return band.level;
+    if (banded >= band.min && banded <= band.max) return band.level;
   }
   return "CRITICAL";
 }

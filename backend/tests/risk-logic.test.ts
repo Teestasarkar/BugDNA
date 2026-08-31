@@ -11,7 +11,7 @@
  * and that it stays silent when it is not.
  */
 import { describe, expect, it } from "vitest";
-import { RISK_BANDS, scoreToRiskLevel } from "../src/config/constants";
+import { RISK_BANDS, RISK_LEVEL_ORDER, scoreToRiskLevel } from "../src/config/constants";
 import { openToken, safeEqual, sealToken } from "../src/lib/crypto";
 import { idToString, isoOrNull, round, toBigInt } from "../src/lib/serialize";
 import { buildExplanation } from "../src/modules/analysis/explain/explain";
@@ -60,6 +60,53 @@ describe("scoreToRiskLevel", () => {
 
     for (let i = 1; i < sorted.length; i++) {
       expect(sorted[i]?.min).toBe((sorted[i - 1]?.max ?? 0) + 1);
+    }
+  });
+
+  /**
+   * These exist because the two tests above passed while the function was
+   * wrong. The bands are contiguous over the integers, and every boundary case
+   * used an integer — but `riskScore` is a Float. 34.9 matched no band, and the
+   * fallthrough reported CRITICAL: the most severe label in the product, for a
+   * score one tenth of a point above LOW. Two of twenty-four seeded analyses
+   * were mislabelled that way, sitting above a genuine 54.6 marked MODERATE.
+   */
+  it("bands fractional scores in the gaps between integer bounds", () => {
+    // Just below each upper bound: still the lower band.
+    expect(scoreToRiskLevel(34.4)).toBe("LOW");
+    expect(scoreToRiskLevel(59.4)).toBe("MODERATE");
+    expect(scoreToRiskLevel(79.4)).toBe("HIGH");
+
+    // Just above: the next band up, never a jump to CRITICAL.
+    expect(scoreToRiskLevel(34.9)).toBe("MODERATE");
+    expect(scoreToRiskLevel(59.9)).toBe("HIGH");
+    expect(scoreToRiskLevel(79.9)).toBe("CRITICAL");
+
+    // The specific values that were mislabelled in the seeded demo tenant.
+    expect(scoreToRiskLevel(34.8)).toBe("MODERATE");
+    expect(scoreToRiskLevel(54.6)).toBe("MODERATE");
+  });
+
+  it("never reports a lower score as a more severe band", () => {
+    // The property that actually matters, swept at a resolution finer than the
+    // band bounds. Monotonicity is the whole promise of a severity scale: if it
+    // can invert anywhere, no individual label can be trusted.
+    let previous = 0;
+    for (let score = 0; score <= 100; score += 0.1) {
+      const rank = RISK_LEVEL_ORDER[scoreToRiskLevel(score)];
+      expect(rank, `score ${score.toFixed(1)} ranked below a lower score`).toBeGreaterThanOrEqual(
+        previous,
+      );
+      previous = rank;
+    }
+  });
+
+  it("agrees with the score the UI displays", () => {
+    // Surfaces render Math.round(score). If banding used the raw value, a PR
+    // could show "35/100" beside a LOW badge while the legend says MODERATE
+    // starts at 35.
+    for (const raw of [34.5, 34.6, 35.4, 59.5, 60.4, 79.5, 80.4]) {
+      expect(scoreToRiskLevel(raw)).toBe(scoreToRiskLevel(Math.round(raw)));
     }
   });
 });
