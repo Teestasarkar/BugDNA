@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { isValidQueueIdentifier } from "../queue/queue-names";
 
 // ---------------------------------------------------------------------------
 // .env loading
@@ -48,6 +49,18 @@ function loadDotEnvFiles(): void {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Rejects colons. BullMQ uses `:` as its Redis key separator and throws from
+ * the Queue/Worker constructor if a name contains one, which surfaces as a
+ * crash at boot rather than a configuration error.
+ */
+const noColon = (inner: z.ZodDefault<z.ZodString>, name: string) =>
+  inner.refine(isValidQueueIdentifier, {
+    message:
+      `${name} cannot contain ":" — BullMQ uses it as a Redis key separator. ` +
+      `Put namespacing in QUEUE_PREFIX instead.`,
+  });
 
 /** Comma-separated list -> trimmed, non-empty string array. */
 const csv = (fallback: string) =>
@@ -129,7 +142,17 @@ const schema = z.object({
   ML_MAX_RETRIES: int(2, 0, 10),
 
   // --- analysis pipeline ---
-  ANALYSIS_QUEUE_NAME: z.string().default("bugdna:analysis"),
+  /**
+   * Queue name and Redis key namespace.
+   *
+   * BullMQ builds its Redis keys as `{prefix}:{queueName}:{...}`, so a colon in
+   * either value is rejected by the library — `Queue name cannot contain :`,
+   * thrown from the constructor at boot. Namespacing goes in QUEUE_PREFIX, not
+   * in the name. Validated here so a bad value is a startup error with an
+   * explanation rather than a BullMQ stack trace.
+   */
+  ANALYSIS_QUEUE_NAME: noColon(z.string().default("analysis"), "ANALYSIS_QUEUE_NAME"),
+  QUEUE_PREFIX: noColon(z.string().default("bugdna"), "QUEUE_PREFIX"),
   ANALYSIS_CONCURRENCY: int(4, 1, 64),
   ANALYSIS_JOB_ATTEMPTS: int(3, 1, 10),
   ANALYSIS_JOB_BACKOFF_MS: int(4_000, 100, 120_000),

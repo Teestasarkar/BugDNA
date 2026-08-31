@@ -22,6 +22,20 @@ const log = scoped("queue");
 
 export const ANALYSIS_QUEUE = env.ANALYSIS_QUEUE_NAME;
 
+/**
+ * Connection and key namespace, shared by every BullMQ construction site.
+ *
+ * A Queue, a Worker and a QueueEvents pointed at the same name but a different
+ * prefix are three objects reading three different sets of Redis keys, and they
+ * fail silently: the API enqueues, the worker sits idle, and nothing logs an
+ * error. Exporting one object instead of two loose values is what stops that
+ * from being possible — the Worker in analysis.processor.ts spreads this too.
+ */
+export const queueBaseOptions = {
+  connection: queueRedis,
+  prefix: env.QUEUE_PREFIX,
+} as const;
+
 /** Default job policy. Overridable per enqueue. */
 export const defaultJobOptions: JobsOptions = {
   attempts: env.ANALYSIS_JOB_ATTEMPTS,
@@ -37,7 +51,7 @@ let analysisQueue: Queue<AnalysisJobData> | undefined;
 export function getAnalysisQueue(): Queue<AnalysisJobData> {
   if (!analysisQueue) {
     analysisQueue = new Queue<AnalysisJobData>(ANALYSIS_QUEUE, {
-      connection: queueRedis,
+      ...queueBaseOptions,
       defaultJobOptions,
     });
     analysisQueue.on("error", (e) => log.error({ err: e }, "analysis queue error"));
@@ -133,7 +147,11 @@ let queueEvents: QueueEvents | undefined;
 export function initQueueEvents(): QueueEvents {
   if (queueEvents) return queueEvents;
 
-  queueEvents = new QueueEvents(ANALYSIS_QUEUE, { connection: queueRedis.duplicate() });
+  queueEvents = new QueueEvents(ANALYSIS_QUEUE, {
+    ...queueBaseOptions,
+    // QueueEvents blocks on Redis, so it needs its own connection.
+    connection: queueRedis.duplicate(),
+  });
 
   queueEvents.on("stalled", ({ jobId }) =>
     log.warn({ jobId }, "job stalled; it will be retried by another worker"),

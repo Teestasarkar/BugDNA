@@ -6,10 +6,9 @@
  * separation means the pipeline is directly testable without a Redis instance.
  */
 import { Worker, type Job } from "bullmq";
-import { queueRedis } from "../../lib/redis";
 import { env } from "../../config/env";
 import { scoped } from "../../lib/logger";
-import { ANALYSIS_QUEUE } from "../queues";
+import { ANALYSIS_QUEUE, queueBaseOptions } from "../queues";
 import { runAnalysis, type AnalysisJobData } from "../../modules/analysis/analysis.pipeline";
 
 const log = scoped("worker");
@@ -72,7 +71,7 @@ export function startAnalysisWorker(): Worker<AnalysisJobData> {
       );
     },
     {
-      connection: queueRedis,
+      ...queueBaseOptions,
       concurrency: env.ANALYSIS_CONCURRENCY,
       // Renew the lock well inside the job timeout so a long-but-healthy
       // analysis is not declared stalled and duplicated.
