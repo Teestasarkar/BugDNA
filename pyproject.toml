@@ -1,0 +1,24 @@
+[project]
+name = "pr-risk-radar"
+version = "1.0.0"
+description = "Pre-merge defect risk for GitHub pull requests: XGBoost trained on SZZ-labelled history, explained with SHAP."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["web", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "BLE", "SIM"]
+ignore = ["E731", "B905", "SIM108"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+filterwarnings = ["ignore::DeprecationWarning", "ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff.lint.per-file-ignores]
+# Remediation templates are user-facing prose; wrapping them mid-sentence hurts more than it helps.
+"riskradar/explain.py" = ["E501"]

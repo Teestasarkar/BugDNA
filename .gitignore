@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+# Per-repository mining output is reproducible from the clones; the assembled dataset is committed.
+data/raw/

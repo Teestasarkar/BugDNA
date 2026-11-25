@@ -1,0 +1,4 @@
+# Mining needs only the standard library and git. Training adds:
+-r requirements.txt
+scikit-learn==1.9.1
+shap==0.54.1

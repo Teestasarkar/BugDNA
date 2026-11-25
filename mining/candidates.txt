@@ -1,0 +1,97 @@
+# Candidate repositories. Each is screened after cloning (see mining/screen.py):
+# kept only if most first-parent commits are PR merges and it has enough
+# human-authored PRs before the label cutoff. The surviving list is repos.txt.
+# Python
+encode/httpx
+encode/starlette
+encode/uvicorn
+fastapi/fastapi
+fastapi/sqlmodel
+pydantic/pydantic
+python-poetry/poetry
+astral-sh/uv
+astral-sh/ruff
+psf/black
+pallets/click
+pypa/pip
+pytest-dev/pytest
+python/mypy
+aio-libs/aiohttp
+PrefectHQ/prefect
+mlflow/mlflow
+scikit-learn/scikit-learn
+Textualize/textual
+huggingface/datasets
+# JavaScript / TypeScript
+vitejs/vite
+vuejs/core
+sveltejs/svelte
+tailwindlabs/tailwindcss
+prettier/prettier
+eslint/eslint
+TanStack/query
+trpc/trpc
+axios/axios
+withastro/astro
+vercel/swr
+pmndrs/zustand
+facebook/react
+facebook/docusaurus
+honojs/hono
+nuxt/nuxt
+excalidraw/excalidraw
+vitest-dev/vitest
+jestjs/jest
+biomejs/biome
+# Go
+gin-gonic/gin
+caddyserver/caddy
+go-gitea/gitea
+cli/cli
+prometheus/prometheus
+charmbracelet/bubbletea
+golangci/golangci-lint
+spf13/cobra
+# Rust
+tokio-rs/tokio
+tokio-rs/axum
+nushell/nushell
+tauri-apps/tauri
+starship/starship
+alacritty/alacritty
+clap-rs/clap
+# JVM / C / C++
+square/okhttp
+ggml-org/llama.cpp
+redis/redis
+valkey-io/valkey
+# Added after size screening (smaller squash-merge repos replacing >300 MB / merge-commit ones)
+urllib3/urllib3
+getsentry/sentry-python
+fastapi/typer
+pydantic/pydantic-core
+hyperium/hyper
+tokio-rs/tracing
+labstack/echo
+gofiber/fiber
+pmndrs/jotai
+react-hook-form/react-hook-form
+fastify/fastify
+TanStack/router
+marimo-team/marimo
+reflex-dev/reflex
+# Second extension (appended; the selection rule still takes candidates in file order)
+rollup/rollup
+pnpm/pnpm
+uber-go/zap
+spf13/viper
+python-attrs/attrs
+pypa/hatch
+pypa/pipx
+zarr-developers/zarr-python
+radix-ui/primitives
+floating-ui/floating-ui
+mswjs/msw
+ktorio/ktor
+unjs/nitro
+zellij-org/zellij

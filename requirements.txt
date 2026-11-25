@@ -1,0 +1,7 @@
+# Serving: the API, live GitHub scoring, and TreeSHAP via XGBoost's built-in pred_contribs.
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+xgboost==3.4.1
+pandas==3.1.1
+numpy==2.3.5
