@@ -1,0 +1,2310 @@
+{
+  "dataset": {
+    "prs": 18000,
+    "repos": 45,
+    "defect_rate": 0.2174,
+    "features": 28,
+    "split_sizes": {
+      "train": 10800,
+      "val": 3600,
+      "test": 3600
+    },
+    "split_dates": {
+      "test": [
+        "2023-04-10",
+        "2025-08-31"
+      ],
+      "train": [
+        "2018-10-15",
+        "2025-08-11"
+      ],
+      "val": [
+        "2021-12-18",
+        "2025-08-21"
+      ]
+    },
+    "languages_note": "see data/repos.json"
+  },
+  "model": {
+    "algorithm": "XGBoost (binary:logistic)",
+    "max_depth": 3,
+    "min_child_weight": 1,
+    "lambda": 1.0,
+    "eta": 0.03,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "trees": 786,
+    "validation_roc_auc": 0.79
+  },
+  "threshold": 0.2787,
+  "test": {
+    "n": 3600,
+    "positives": 665,
+    "base_rate": 0.1847,
+    "roc_auc": 0.7729,
+    "pr_auc": 0.5068,
+    "precision": 0.3976,
+    "recall": 0.6045,
+    "f1": 0.4797,
+    "flagged_share": 0.2808,
+    "precision_at_top10pct": 0.6083,
+    "recall_at_top20pct": 0.4932
+  },
+  "validation": {
+    "n": 3600,
+    "positives": 798,
+    "base_rate": 0.2217,
+    "roc_auc": 0.79,
+    "pr_auc": 0.5742,
+    "precision": 0.4911,
+    "recall": 0.619,
+    "f1": 0.5477,
+    "flagged_share": 0.2794,
+    "precision_at_top10pct": 0.7083,
+    "recall_at_top20pct": 0.5013
+  },
+  "baselines": {
+    "size_only_roc_auc": 0.7024,
+    "size_only_pr_auc": 0.3508,
+    "logistic_regression_roc_auc": 0.7692,
+    "logistic_regression_pr_auc": 0.4799
+  },
+  "cross_project": {
+    "folds": 5,
+    "roc_auc_mean": 0.7781,
+    "roc_auc_std": 0.0084,
+    "fold_roc_aucs": [
+      0.7684,
+      0.7826,
+      0.7673,
+      0.7851,
+      0.7869
+    ]
+  },
+  "search": [
+    {
+      "max_depth": 3,
+      "min_child_weight": 1,
+      "lambda": 1.0,
+      "trees": 786,
+      "val_auc": 0.79
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 1,
+      "lambda": 10.0,
+      "trees": 752,
+      "val_auc": 0.7897
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 5,
+      "lambda": 1.0,
+      "trees": 808,
+      "val_auc": 0.7897
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 5,
+      "lambda": 10.0,
+      "trees": 786,
+      "val_auc": 0.7889
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 20,
+      "lambda": 1.0,
+      "trees": 752,
+      "val_auc": 0.7896
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 20,
+      "lambda": 10.0,
+      "trees": 510,
+      "val_auc": 0.7881
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 1,
+      "lambda": 1.0,
+      "trees": 297,
+      "val_auc": 0.7891
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 1,
+      "lambda": 10.0,
+      "trees": 410,
+      "val_auc": 0.7878
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "lambda": 1.0,
+      "trees": 413,
+      "val_auc": 0.7891
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "lambda": 10.0,
+      "trees": 371,
+      "val_auc": 0.788
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 20,
+      "lambda": 1.0,
+      "trees": 334,
+      "val_auc": 0.7883
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 20,
+      "lambda": 10.0,
+      "trees": 607,
+      "val_auc": 0.7879
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 1,
+      "lambda": 1.0,
+      "trees": 193,
+      "val_auc": 0.7862
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 1,
+      "lambda": 10.0,
+      "trees": 245,
+      "val_auc": 0.7867
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 5,
+      "lambda": 1.0,
+      "trees": 227,
+      "val_auc": 0.7878
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 5,
+      "lambda": 10.0,
+      "trees": 245,
+      "val_auc": 0.7869
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 20,
+      "lambda": 1.0,
+      "trees": 182,
+      "val_auc": 0.7871
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 20,
+      "lambda": 10.0,
+      "trees": 322,
+      "val_auc": 0.7873
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 1,
+      "lambda": 1.0,
+      "trees": 174,
+      "val_auc": 0.7859
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 1,
+      "lambda": 10.0,
+      "trees": 334,
+      "val_auc": 0.7872
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 5,
+      "lambda": 1.0,
+      "trees": 232,
+      "val_auc": 0.787
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 5,
+      "lambda": 10.0,
+      "trees": 334,
+      "val_auc": 0.7855
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 20,
+      "lambda": 1.0,
+      "trees": 245,
+      "val_auc": 0.7863
+    },
+    {
+      "max_depth": 6,
+      "min_child_weight": 20,
+      "lambda": 10.0,
+      "trees": 244,
+      "val_auc": 0.7864
+    }
+  ],
+  "shap_max_abs_diff_vs_shap_package": 0.0,
+  "importance": [
+    {
+      "feature": "prior_fixes_365d",
+      "mean_abs_shap": 0.5689
+    },
+    {
+      "feature": "lines_added",
+      "mean_abs_shap": 0.5343
+    },
+    {
+      "feature": "prior_changes_365d",
+      "mean_abs_shap": 0.3395
+    },
+    {
+      "feature": "source_files_changed",
+      "mean_abs_shap": 0.2628
+    },
+    {
+      "feature": "lines_deleted",
+      "mean_abs_shap": 0.2253
+    },
+    {
+      "feature": "is_fix",
+      "mean_abs_shap": 0.2098
+    },
+    {
+      "feature": "mean_file_age_days",
+      "mean_abs_shap": 0.1295
+    },
+    {
+      "feature": "author_prior_changes",
+      "mean_abs_shap": 0.1295
+    },
+    {
+      "feature": "test_churn_ratio",
+      "mean_abs_shap": 0.1288
+    },
+    {
+      "feature": "deletion_ratio",
+      "mean_abs_shap": 0.1036
+    },
+    {
+      "feature": "author_subsystem_changes",
+      "mean_abs_shap": 0.0856
+    },
+    {
+      "feature": "prior_authors_365d",
+      "mean_abs_shap": 0.0799
+    },
+    {
+      "feature": "author_recent_changes_90d",
+      "mean_abs_shap": 0.0671
+    },
+    {
+      "feature": "recent_changes_90d",
+      "mean_abs_shap": 0.0557
+    },
+    {
+      "feature": "change_entropy",
+      "mean_abs_shap": 0.0555
+    },
+    {
+      "feature": "author_ownership_share",
+      "mean_abs_shap": 0.0509
+    },
+    {
+      "feature": "test_files_changed",
+      "mean_abs_shap": 0.0486
+    },
+    {
+      "feature": "max_file_churn_share",
+      "mean_abs_shap": 0.0287
+    },
+    {
+      "feature": "files_changed",
+      "mean_abs_shap": 0.0247
+    },
+    {
+      "feature": "subsystems_changed",
+      "mean_abs_shap": 0.0153
+    },
+    {
+      "feature": "dirs_changed",
+      "mean_abs_shap": 0.0152
+    },
+    {
+      "feature": "files_added",
+      "mean_abs_shap": 0.0141
+    },
+    {
+      "feature": "dependency_files_changed",
+      "mean_abs_shap": 0.014
+    },
+    {
+      "feature": "config_files_changed",
+      "mean_abs_shap": 0.0132
+    },
+    {
+      "feature": "author_file_familiarity",
+      "mean_abs_shap": 0.012
+    },
+    {
+      "feature": "languages_changed",
+      "mean_abs_shap": 0.0094
+    },
+    {
+      "feature": "files_deleted",
+      "mean_abs_shap": 0.0079
+    },
+    {
+      "feature": "untested_source_change",
+      "mean_abs_shap": 0.0
+    }
+  ],
+  "per_repo": [
+    {
+      "repo": "PrefectHQ/prefect",
+      "test_prs": 80,
+      "test_positives": 13,
+      "roc_auc": 0.5936,
+      "recall": 0.4615
+    },
+    {
+      "repo": "TanStack/router",
+      "test_prs": 80,
+      "test_positives": 37,
+      "roc_auc": 0.7404,
+      "recall": 0.8919
+    },
+    {
+      "repo": "aio-libs/aiohttp",
+      "test_prs": 80,
+      "test_positives": 17,
+      "roc_auc": 0.8086,
+      "recall": 0.7647
+    },
+    {
+      "repo": "astral-sh/ruff",
+      "test_prs": 80,
+      "test_positives": 25,
+      "roc_auc": 0.784,
+      "recall": 0.72
+    },
+    {
+      "repo": "astral-sh/uv",
+      "test_prs": 80,
+      "test_positives": 10,
+      "roc_auc": 0.7543,
+      "recall": 0.3
+    },
+    {
+      "repo": "caddyserver/caddy",
+      "test_prs": 80,
+      "test_positives": 10,
+      "roc_auc": 0.6429,
+      "recall": 0.4
+    },
+    {
+      "repo": "encode/httpx",
+      "test_prs": 80,
+      "test_positives": 1,
+      "roc_auc": 0.9494,
+      "recall": 1.0
+    },
+    {
+      "repo": "encode/starlette",
+      "test_prs": 80,
+      "test_positives": 4,
+      "roc_auc": 0.6612,
+      "recall": 0.25
+    },
+    {
+      "repo": "encode/uvicorn",
+      "test_prs": 80,
+      "test_positives": 4,
+      "roc_auc": 0.8553,
+      "recall": 0.5
+    },
+    {
+      "repo": "eslint/eslint",
+      "test_prs": 80,
+      "test_positives": 10,
+      "roc_auc": 0.7557,
+      "recall": 0.7
+    },
+    {
+      "repo": "excalidraw/excalidraw",
+      "test_prs": 80,
+      "test_positives": 28,
+      "roc_auc": 0.8681,
+      "recall": 0.9286
+    },
+    {
+      "repo": "facebook/react",
+      "test_prs": 80,
+      "test_positives": 15,
+      "roc_auc": 0.799,
+      "recall": 0.7333
+    },
+    {
+      "repo": "fastapi/fastapi",
+      "test_prs": 80,
+      "test_positives": 13,
+      "roc_auc": 0.8462,
+      "recall": 0.3077
+    },
+    {
+      "repo": "fastify/fastify",
+      "test_prs": 80,
+      "test_positives": 17,
+      "roc_auc": 0.7218,
+      "recall": 0.2353
+    },
+    {
+      "repo": "getsentry/sentry-python",
+      "test_prs": 80,
+      "test_positives": 19,
+      "roc_auc": 0.7118,
+      "recall": 0.3684
+    },
+    {
+      "repo": "gin-gonic/gin",
+      "test_prs": 80,
+      "test_positives": 7,
+      "roc_auc": 0.4051,
+      "recall": 0.0
+    },
+    {
+      "repo": "golangci/golangci-lint",
+      "test_prs": 80,
+      "test_positives": 10,
+      "roc_auc": 0.6771,
+      "recall": 0.5
+    },
+    {
+      "repo": "honojs/hono",
+      "test_prs": 80,
+      "test_positives": 19,
+      "roc_auc": 0.692,
+      "recall": 0.3684
+    },
+    {
+      "repo": "huggingface/datasets",
+      "test_prs": 80,
+      "test_positives": 17,
+      "roc_auc": 0.7554,
+      "recall": 0.4706
+    },
+    {
+      "repo": "marimo-team/marimo",
+      "test_prs": 80,
+      "test_positives": 25,
+      "roc_auc": 0.8429,
+      "recall": 0.8
+    },
+    {
+      "repo": "mlflow/mlflow",
+      "test_prs": 80,
+      "test_positives": 17,
+      "roc_auc": 0.8581,
+      "recall": 0.8235
+    },
+    {
+      "repo": "nushell/nushell",
+      "test_prs": 80,
+      "test_positives": 11,
+      "roc_auc": 0.8182,
+      "recall": 0.6364
+    },
+    {
+      "repo": "pmndrs/jotai",
+      "test_prs": 80,
+      "test_positives": 20,
+      "roc_auc": 0.7975,
+      "recall": 0.8
+    },
+    {
+      "repo": "prettier/prettier",
+      "test_prs": 80,
+      "test_positives": 6,
+      "roc_auc": 0.8311,
+      "recall": 0.5
+    },
+    {
+      "repo": "psf/black",
+      "test_prs": 80,
+      "test_positives": 14,
+      "roc_auc": 0.7825,
+      "recall": 0.5714
+    },
+    {
+      "repo": "pydantic/pydantic",
+      "test_prs": 80,
+      "test_positives": 6,
+      "roc_auc": 0.6306,
+      "recall": 0.1667
+    },
+    {
+      "repo": "pydantic/pydantic-core",
+      "test_prs": 80,
+      "test_positives": 8,
+      "roc_auc": 0.7431,
+      "recall": 0.625
+    },
+    {
+      "repo": "python-poetry/poetry",
+      "test_prs": 80,
+      "test_positives": 15,
+      "roc_auc": 0.7836,
+      "recall": 0.6
+    },
+    {
+      "repo": "python/mypy",
+      "test_prs": 80,
+      "test_positives": 15,
+      "roc_auc": 0.6933,
+      "recall": 0.5333
+    },
+    {
+      "repo": "react-hook-form/react-hook-form",
+      "test_prs": 80,
+      "test_positives": 35,
+      "roc_auc": 0.7003,
+      "recall": 0.7143
+    },
+    {
+      "repo": "redis/redis",
+      "test_prs": 80,
+      "test_positives": 12,
+      "roc_auc": 0.7537,
+      "recall": 0.6667
+    },
+    {
+      "repo": "reflex-dev/reflex",
+      "test_prs": 80,
+      "test_positives": 16,
+      "roc_auc": 0.752,
+      "recall": 0.4375
+    },
+    {
+      "repo": "square/okhttp",
+      "test_prs": 80,
+      "test_positives": 5,
+      "roc_auc": 0.84,
+      "recall": 0.6
+    },
+    {
+      "repo": "starship/starship",
+      "test_prs": 80,
+      "test_positives": 16,
+      "roc_auc": 0.6904,
+      "recall": 0.5
+    },
+    {
+      "repo": "tailwindlabs/tailwindcss",
+      "test_prs": 80,
+      "test_positives": 6,
+      "roc_auc": 0.7207,
+      "recall": 0.5
+    },
+    {
+      "repo": "tauri-apps/tauri",
+      "test_prs": 80,
+      "test_positives": 25,
+      "roc_auc": 0.7353,
+      "recall": 0.64
+    },
+    {
+      "repo": "tokio-rs/axum",
+      "test_prs": 80,
+      "test_positives": 10,
+      "roc_auc": 0.69,
+      "recall": 0.4
+    },
+    {
+      "repo": "tokio-rs/tokio",
+      "test_prs": 80,
+      "test_positives": 5,
+      "roc_auc": 0.888,
+      "recall": 0.6
+    },
+    {
+      "repo": "tokio-rs/tracing",
+      "test_prs": 80,
+      "test_positives": 5,
+      "roc_auc": 0.696,
+      "recall": 0.4
+    },
+    {
+      "repo": "trpc/trpc",
+      "test_prs": 80,
+      "test_positives": 17,
+      "roc_auc": 0.7591,
+      "recall": 0.5882
+    },
+    {
+      "repo": "valkey-io/valkey",
+      "test_prs": 80,
+      "test_positives": 9,
+      "roc_auc": 0.9155,
+      "recall": 0.7778
+    },
+    {
+      "repo": "vercel/swr",
+      "test_prs": 80,
+      "test_positives": 24,
+      "roc_auc": 0.7366,
+      "recall": 0.5833
+    },
+    {
+      "repo": "vitejs/vite",
+      "test_prs": 80,
+      "test_positives": 20,
+      "roc_auc": 0.6358,
+      "recall": 0.45
+    },
+    {
+      "repo": "vitest-dev/vitest",
+      "test_prs": 80,
+      "test_positives": 29,
+      "roc_auc": 0.7897,
+      "recall": 0.8276
+    },
+    {
+      "repo": "vuejs/core",
+      "test_prs": 80,
+      "test_positives": 18,
+      "roc_auc": 0.6523,
+      "recall": 0.4444
+    }
+  ],
+  "curves": {
+    "roc": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0014,
+        0.0526
+      ],
+      [
+        0.0027,
+        0.0752
+      ],
+      [
+        0.0041,
+        0.1158
+      ],
+      [
+        0.0061,
+        0.1278
+      ],
+      [
+        0.0075,
+        0.1368
+      ],
+      [
+        0.0099,
+        0.1504
+      ],
+      [
+        0.0119,
+        0.1609
+      ],
+      [
+        0.0133,
+        0.1684
+      ],
+      [
+        0.015,
+        0.191
+      ],
+      [
+        0.0177,
+        0.209
+      ],
+      [
+        0.0218,
+        0.218
+      ],
+      [
+        0.0235,
+        0.2376
+      ],
+      [
+        0.0269,
+        0.2511
+      ],
+      [
+        0.03,
+        0.2571
+      ],
+      [
+        0.0324,
+        0.2707
+      ],
+      [
+        0.0337,
+        0.2887
+      ],
+      [
+        0.0378,
+        0.2962
+      ],
+      [
+        0.0422,
+        0.3068
+      ],
+      [
+        0.0463,
+        0.3173
+      ],
+      [
+        0.048,
+        0.3323
+      ],
+      [
+        0.0508,
+        0.3414
+      ],
+      [
+        0.0532,
+        0.3474
+      ],
+      [
+        0.0566,
+        0.3564
+      ],
+      [
+        0.0579,
+        0.3684
+      ],
+      [
+        0.0603,
+        0.3759
+      ],
+      [
+        0.0641,
+        0.385
+      ],
+      [
+        0.0692,
+        0.391
+      ],
+      [
+        0.0739,
+        0.3985
+      ],
+      [
+        0.0787,
+        0.406
+      ],
+      [
+        0.0831,
+        0.4135
+      ],
+      [
+        0.0879,
+        0.4211
+      ],
+      [
+        0.0923,
+        0.4271
+      ],
+      [
+        0.0968,
+        0.4361
+      ],
+      [
+        0.1002,
+        0.4421
+      ],
+      [
+        0.1029,
+        0.4481
+      ],
+      [
+        0.1056,
+        0.4541
+      ],
+      [
+        0.1094,
+        0.4617
+      ],
+      [
+        0.1124,
+        0.4662
+      ],
+      [
+        0.1175,
+        0.4737
+      ],
+      [
+        0.1223,
+        0.4827
+      ],
+      [
+        0.1322,
+        0.4917
+      ],
+      [
+        0.1373,
+        0.4992
+      ],
+      [
+        0.14,
+        0.5053
+      ],
+      [
+        0.1414,
+        0.5143
+      ],
+      [
+        0.1472,
+        0.5218
+      ],
+      [
+        0.1564,
+        0.5278
+      ],
+      [
+        0.1652,
+        0.5338
+      ],
+      [
+        0.167,
+        0.5444
+      ],
+      [
+        0.1707,
+        0.5579
+      ],
+      [
+        0.1744,
+        0.5639
+      ],
+      [
+        0.1768,
+        0.5714
+      ],
+      [
+        0.1789,
+        0.5774
+      ],
+      [
+        0.1857,
+        0.5835
+      ],
+      [
+        0.1963,
+        0.588
+      ],
+      [
+        0.201,
+        0.594
+      ],
+      [
+        0.2041,
+        0.6015
+      ],
+      [
+        0.2109,
+        0.6075
+      ],
+      [
+        0.2136,
+        0.615
+      ],
+      [
+        0.2181,
+        0.6241
+      ],
+      [
+        0.2249,
+        0.6331
+      ],
+      [
+        0.2334,
+        0.6421
+      ],
+      [
+        0.244,
+        0.6466
+      ],
+      [
+        0.2542,
+        0.6541
+      ],
+      [
+        0.2579,
+        0.6617
+      ],
+      [
+        0.2671,
+        0.6677
+      ],
+      [
+        0.2729,
+        0.6722
+      ],
+      [
+        0.2835,
+        0.6782
+      ],
+      [
+        0.293,
+        0.6842
+      ],
+      [
+        0.3046,
+        0.6932
+      ],
+      [
+        0.3131,
+        0.6977
+      ],
+      [
+        0.3199,
+        0.7038
+      ],
+      [
+        0.3267,
+        0.7098
+      ],
+      [
+        0.3329,
+        0.7158
+      ],
+      [
+        0.3411,
+        0.7203
+      ],
+      [
+        0.3475,
+        0.7278
+      ],
+      [
+        0.3489,
+        0.7353
+      ],
+      [
+        0.3516,
+        0.7429
+      ],
+      [
+        0.3639,
+        0.7519
+      ],
+      [
+        0.3741,
+        0.7579
+      ],
+      [
+        0.3802,
+        0.7654
+      ],
+      [
+        0.3853,
+        0.7714
+      ],
+      [
+        0.3922,
+        0.7759
+      ],
+      [
+        0.4051,
+        0.782
+      ],
+      [
+        0.417,
+        0.788
+      ],
+      [
+        0.4313,
+        0.794
+      ],
+      [
+        0.4382,
+        0.7985
+      ],
+      [
+        0.4497,
+        0.806
+      ],
+      [
+        0.4542,
+        0.8135
+      ],
+      [
+        0.462,
+        0.8226
+      ],
+      [
+        0.4692,
+        0.8271
+      ],
+      [
+        0.477,
+        0.8346
+      ],
+      [
+        0.4811,
+        0.8421
+      ],
+      [
+        0.4995,
+        0.8481
+      ],
+      [
+        0.5261,
+        0.8541
+      ],
+      [
+        0.5356,
+        0.8602
+      ],
+      [
+        0.5656,
+        0.8662
+      ],
+      [
+        0.5765,
+        0.8722
+      ],
+      [
+        0.5881,
+        0.8767
+      ],
+      [
+        0.5973,
+        0.8827
+      ],
+      [
+        0.6003,
+        0.8887
+      ],
+      [
+        0.6129,
+        0.8962
+      ],
+      [
+        0.6252,
+        0.9008
+      ],
+      [
+        0.6467,
+        0.9068
+      ],
+      [
+        0.6624,
+        0.9128
+      ],
+      [
+        0.6692,
+        0.9203
+      ],
+      [
+        0.6838,
+        0.9248
+      ],
+      [
+        0.7022,
+        0.9308
+      ],
+      [
+        0.7278,
+        0.9368
+      ],
+      [
+        0.7356,
+        0.9429
+      ],
+      [
+        0.7462,
+        0.9474
+      ],
+      [
+        0.7792,
+        0.9549
+      ],
+      [
+        0.7877,
+        0.9609
+      ],
+      [
+        0.8058,
+        0.9669
+      ],
+      [
+        0.8177,
+        0.9714
+      ],
+      [
+        0.8392,
+        0.9774
+      ],
+      [
+        0.8566,
+        0.9835
+      ],
+      [
+        0.9077,
+        0.991
+      ],
+      [
+        0.9618,
+        0.9955
+      ],
+      [
+        1.0,
+        1.0
+      ]
+    ],
+    "pr": [
+      [
+        0.0,
+        1.0
+      ],
+      [
+        0.0391,
+        0.8667
+      ],
+      [
+        0.0782,
+        0.8667
+      ],
+      [
+        0.1173,
+        0.8571
+      ],
+      [
+        0.1429,
+        0.7851
+      ],
+      [
+        0.1684,
+        0.7417
+      ],
+      [
+        0.2,
+        0.7348
+      ],
+      [
+        0.2226,
+        0.6981
+      ],
+      [
+        0.2466,
+        0.6777
+      ],
+      [
+        0.2677,
+        0.6544
+      ],
+      [
+        0.2932,
+        0.6457
+      ],
+      [
+        0.3098,
+        0.6186
+      ],
+      [
+        0.3323,
+        0.6088
+      ],
+      [
+        0.3534,
+        0.598
+      ],
+      [
+        0.3729,
+        0.5863
+      ],
+      [
+        0.3865,
+        0.5661
+      ],
+      [
+        0.3985,
+        0.5475
+      ],
+      [
+        0.4105,
+        0.5311
+      ],
+      [
+        0.4241,
+        0.5184
+      ],
+      [
+        0.4361,
+        0.5043
+      ],
+      [
+        0.4511,
+        0.4959
+      ],
+      [
+        0.4647,
+        0.4866
+      ],
+      [
+        0.4752,
+        0.4752
+      ],
+      [
+        0.4827,
+        0.4612
+      ],
+      [
+        0.4962,
+        0.4545
+      ],
+      [
+        0.5128,
+        0.4511
+      ],
+      [
+        0.5218,
+        0.4415
+      ],
+      [
+        0.5308,
+        0.4321
+      ],
+      [
+        0.5383,
+        0.4227
+      ],
+      [
+        0.5594,
+        0.4242
+      ],
+      [
+        0.5759,
+        0.4223
+      ],
+      [
+        0.5835,
+        0.4136
+      ],
+      [
+        0.5895,
+        0.405
+      ],
+      [
+        0.6,
+        0.3998
+      ],
+      [
+        0.612,
+        0.3959
+      ],
+      [
+        0.6271,
+        0.3938
+      ],
+      [
+        0.6346,
+        0.3875
+      ],
+      [
+        0.6451,
+        0.3834
+      ],
+      [
+        0.6481,
+        0.3751
+      ],
+      [
+        0.6541,
+        0.3686
+      ],
+      [
+        0.6647,
+        0.3653
+      ],
+      [
+        0.6692,
+        0.3589
+      ],
+      [
+        0.6767,
+        0.3543
+      ],
+      [
+        0.6812,
+        0.3485
+      ],
+      [
+        0.6872,
+        0.3434
+      ],
+      [
+        0.6962,
+        0.3402
+      ],
+      [
+        0.7008,
+        0.335
+      ],
+      [
+        0.7068,
+        0.3308
+      ],
+      [
+        0.7143,
+        0.3271
+      ],
+      [
+        0.7218,
+        0.3239
+      ],
+      [
+        0.7338,
+        0.3228
+      ],
+      [
+        0.7474,
+        0.3223
+      ],
+      [
+        0.7534,
+        0.3185
+      ],
+      [
+        0.7594,
+        0.315
+      ],
+      [
+        0.7669,
+        0.3123
+      ],
+      [
+        0.7744,
+        0.3097
+      ],
+      [
+        0.782,
+        0.307
+      ],
+      [
+        0.785,
+        0.3028
+      ],
+      [
+        0.788,
+        0.2987
+      ],
+      [
+        0.791,
+        0.2948
+      ],
+      [
+        0.7985,
+        0.2926
+      ],
+      [
+        0.806,
+        0.2905
+      ],
+      [
+        0.8135,
+        0.2885
+      ],
+      [
+        0.8226,
+        0.2871
+      ],
+      [
+        0.8316,
+        0.2856
+      ],
+      [
+        0.8406,
+        0.2843
+      ],
+      [
+        0.8436,
+        0.2811
+      ],
+      [
+        0.8466,
+        0.2779
+      ],
+      [
+        0.8511,
+        0.2752
+      ],
+      [
+        0.8541,
+        0.2722
+      ],
+      [
+        0.8571,
+        0.2692
+      ],
+      [
+        0.8632,
+        0.2673
+      ],
+      [
+        0.8647,
+        0.264
+      ],
+      [
+        0.8647,
+        0.2604
+      ],
+      [
+        0.8662,
+        0.2574
+      ],
+      [
+        0.8707,
+        0.2553
+      ],
+      [
+        0.8752,
+        0.2532
+      ],
+      [
+        0.8827,
+        0.252
+      ],
+      [
+        0.8902,
+        0.251
+      ],
+      [
+        0.8947,
+        0.2491
+      ],
+      [
+        0.8992,
+        0.2472
+      ],
+      [
+        0.9023,
+        0.2449
+      ],
+      [
+        0.9038,
+        0.2423
+      ],
+      [
+        0.9098,
+        0.241
+      ],
+      [
+        0.9098,
+        0.2382
+      ],
+      [
+        0.9158,
+        0.2369
+      ],
+      [
+        0.9248,
+        0.2364
+      ],
+      [
+        0.9263,
+        0.2341
+      ],
+      [
+        0.9293,
+        0.2322
+      ],
+      [
+        0.9338,
+        0.2307
+      ],
+      [
+        0.9338,
+        0.2281
+      ],
+      [
+        0.9338,
+        0.2257
+      ],
+      [
+        0.9414,
+        0.225
+      ],
+      [
+        0.9474,
+        0.224
+      ],
+      [
+        0.9489,
+        0.2219
+      ],
+      [
+        0.9519,
+        0.2203
+      ],
+      [
+        0.9549,
+        0.2187
+      ],
+      [
+        0.9579,
+        0.2171
+      ],
+      [
+        0.9624,
+        0.2159
+      ],
+      [
+        0.9639,
+        0.2141
+      ],
+      [
+        0.9699,
+        0.2133
+      ],
+      [
+        0.9729,
+        0.2118
+      ],
+      [
+        0.9759,
+        0.2104
+      ],
+      [
+        0.9789,
+        0.209
+      ],
+      [
+        0.9805,
+        0.2073
+      ],
+      [
+        0.9835,
+        0.2059
+      ],
+      [
+        0.985,
+        0.2043
+      ],
+      [
+        0.988,
+        0.203
+      ],
+      [
+        0.9895,
+        0.2015
+      ],
+      [
+        0.9895,
+        0.1996
+      ],
+      [
+        0.991,
+        0.1981
+      ],
+      [
+        0.991,
+        0.1963
+      ],
+      [
+        0.991,
+        0.1946
+      ],
+      [
+        0.991,
+        0.1928
+      ],
+      [
+        0.9925,
+        0.1914
+      ],
+      [
+        0.9955,
+        0.1903
+      ],
+      [
+        0.997,
+        0.189
+      ],
+      [
+        0.9985,
+        0.1876
+      ],
+      [
+        0.9985,
+        0.186
+      ],
+      [
+        1.0,
+        0.1847
+      ]
+    ],
+    "roc_size_only": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0014,
+        0.006
+      ],
+      [
+        0.0048,
+        0.015
+      ],
+      [
+        0.0061,
+        0.0195
+      ],
+      [
+        0.0075,
+        0.0241
+      ],
+      [
+        0.0089,
+        0.0316
+      ],
+      [
+        0.0112,
+        0.0391
+      ],
+      [
+        0.0119,
+        0.0436
+      ],
+      [
+        0.0136,
+        0.0541
+      ],
+      [
+        0.015,
+        0.0632
+      ],
+      [
+        0.0164,
+        0.0647
+      ],
+      [
+        0.0194,
+        0.0707
+      ],
+      [
+        0.0204,
+        0.0782
+      ],
+      [
+        0.0211,
+        0.0812
+      ],
+      [
+        0.0228,
+        0.0872
+      ],
+      [
+        0.0235,
+        0.0947
+      ],
+      [
+        0.0249,
+        0.1053
+      ],
+      [
+        0.0266,
+        0.1083
+      ],
+      [
+        0.0279,
+        0.1158
+      ],
+      [
+        0.029,
+        0.1233
+      ],
+      [
+        0.0313,
+        0.1278
+      ],
+      [
+        0.0337,
+        0.1323
+      ],
+      [
+        0.0348,
+        0.1368
+      ],
+      [
+        0.0361,
+        0.1429
+      ],
+      [
+        0.0375,
+        0.1504
+      ],
+      [
+        0.0392,
+        0.1534
+      ],
+      [
+        0.0399,
+        0.1609
+      ],
+      [
+        0.0405,
+        0.1669
+      ],
+      [
+        0.0416,
+        0.1759
+      ],
+      [
+        0.044,
+        0.1805
+      ],
+      [
+        0.0453,
+        0.1835
+      ],
+      [
+        0.047,
+        0.1895
+      ],
+      [
+        0.0487,
+        0.197
+      ],
+      [
+        0.0494,
+        0.2
+      ],
+      [
+        0.0511,
+        0.209
+      ],
+      [
+        0.0521,
+        0.2165
+      ],
+      [
+        0.0538,
+        0.2211
+      ],
+      [
+        0.0555,
+        0.2256
+      ],
+      [
+        0.0569,
+        0.2316
+      ],
+      [
+        0.0579,
+        0.2361
+      ],
+      [
+        0.06,
+        0.2406
+      ],
+      [
+        0.0617,
+        0.2436
+      ],
+      [
+        0.0634,
+        0.2466
+      ],
+      [
+        0.0647,
+        0.2511
+      ],
+      [
+        0.0661,
+        0.2526
+      ],
+      [
+        0.0678,
+        0.2571
+      ],
+      [
+        0.0695,
+        0.2647
+      ],
+      [
+        0.0719,
+        0.2692
+      ],
+      [
+        0.0722,
+        0.2797
+      ],
+      [
+        0.0743,
+        0.2842
+      ],
+      [
+        0.0763,
+        0.2887
+      ],
+      [
+        0.078,
+        0.2917
+      ],
+      [
+        0.0787,
+        0.2992
+      ],
+      [
+        0.0801,
+        0.3023
+      ],
+      [
+        0.0814,
+        0.3053
+      ],
+      [
+        0.0852,
+        0.3083
+      ],
+      [
+        0.0879,
+        0.3113
+      ],
+      [
+        0.0903,
+        0.3143
+      ],
+      [
+        0.094,
+        0.3218
+      ],
+      [
+        0.0961,
+        0.3323
+      ],
+      [
+        0.0981,
+        0.3338
+      ],
+      [
+        0.1005,
+        0.3383
+      ],
+      [
+        0.1036,
+        0.3398
+      ],
+      [
+        0.1066,
+        0.3414
+      ],
+      [
+        0.1097,
+        0.3444
+      ],
+      [
+        0.1128,
+        0.3474
+      ],
+      [
+        0.1145,
+        0.3549
+      ],
+      [
+        0.1175,
+        0.3594
+      ],
+      [
+        0.1206,
+        0.3684
+      ],
+      [
+        0.1233,
+        0.3744
+      ],
+      [
+        0.1247,
+        0.3805
+      ],
+      [
+        0.1295,
+        0.3865
+      ],
+      [
+        0.1329,
+        0.3925
+      ],
+      [
+        0.1359,
+        0.397
+      ],
+      [
+        0.1407,
+        0.403
+      ],
+      [
+        0.1441,
+        0.4075
+      ],
+      [
+        0.1468,
+        0.4135
+      ],
+      [
+        0.152,
+        0.418
+      ],
+      [
+        0.1547,
+        0.4211
+      ],
+      [
+        0.1584,
+        0.4241
+      ],
+      [
+        0.1612,
+        0.4301
+      ],
+      [
+        0.167,
+        0.4331
+      ],
+      [
+        0.171,
+        0.4391
+      ],
+      [
+        0.1761,
+        0.4436
+      ],
+      [
+        0.1816,
+        0.4466
+      ],
+      [
+        0.1864,
+        0.4602
+      ],
+      [
+        0.1901,
+        0.4647
+      ],
+      [
+        0.1928,
+        0.4752
+      ],
+      [
+        0.198,
+        0.4827
+      ],
+      [
+        0.2058,
+        0.4917
+      ],
+      [
+        0.2109,
+        0.4962
+      ],
+      [
+        0.2177,
+        0.5038
+      ],
+      [
+        0.2256,
+        0.5098
+      ],
+      [
+        0.2296,
+        0.5158
+      ],
+      [
+        0.2385,
+        0.5278
+      ],
+      [
+        0.2436,
+        0.5368
+      ],
+      [
+        0.2521,
+        0.5549
+      ],
+      [
+        0.2637,
+        0.5564
+      ],
+      [
+        0.2705,
+        0.5579
+      ],
+      [
+        0.2852,
+        0.5714
+      ],
+      [
+        0.2985,
+        0.5789
+      ],
+      [
+        0.3111,
+        0.588
+      ],
+      [
+        0.3257,
+        0.6045
+      ],
+      [
+        0.338,
+        0.615
+      ],
+      [
+        0.3499,
+        0.6256
+      ],
+      [
+        0.3652,
+        0.6376
+      ],
+      [
+        0.3819,
+        0.6541
+      ],
+      [
+        0.3993,
+        0.6722
+      ],
+      [
+        0.4225,
+        0.6962
+      ],
+      [
+        0.4511,
+        0.7188
+      ],
+      [
+        0.4733,
+        0.7323
+      ],
+      [
+        0.5066,
+        0.7579
+      ],
+      [
+        0.5302,
+        0.788
+      ],
+      [
+        0.5646,
+        0.8271
+      ],
+      [
+        0.6065,
+        0.8632
+      ],
+      [
+        0.6457,
+        0.8767
+      ],
+      [
+        0.709,
+        0.9053
+      ],
+      [
+        0.7867,
+        0.9263
+      ],
+      [
+        0.8702,
+        0.9639
+      ],
+      [
+        1.0,
+        1.0
+      ]
+    ],
+    "operating_point": {
+      "fpr": 0.2075,
+      "recall": 0.6045,
+      "precision": 0.3976
+    }
+  },
+  "feature_specs": [
+    {
+      "name": "lines_added",
+      "group": "size",
+      "label": "Lines added",
+      "description": "Lines added across the diff."
+    },
+    {
+      "name": "lines_deleted",
+      "group": "size",
+      "label": "Lines deleted",
+      "description": "Lines removed across the diff."
+    },
+    {
+      "name": "files_changed",
+      "group": "size",
+      "label": "Files changed",
+      "description": "Number of files the PR touches."
+    },
+    {
+      "name": "dirs_changed",
+      "group": "diffusion",
+      "label": "Directories changed",
+      "description": "Distinct directories touched."
+    },
+    {
+      "name": "subsystems_changed",
+      "group": "diffusion",
+      "label": "Subsystems changed",
+      "description": "Distinct top-level directories touched (root files count as one)."
+    },
+    {
+      "name": "change_entropy",
+      "group": "diffusion",
+      "label": "Change entropy",
+      "description": "Shannon entropy of churn across files; high means scattered, low means focused."
+    },
+    {
+      "name": "max_file_churn_share",
+      "group": "diffusion",
+      "label": "Largest file's share",
+      "description": "Share of total churn in the single most-changed file."
+    },
+    {
+      "name": "deletion_ratio",
+      "group": "size",
+      "label": "Deletion ratio",
+      "description": "Deleted lines as a share of churn."
+    },
+    {
+      "name": "files_added",
+      "group": "size",
+      "label": "Files added",
+      "description": "New files created."
+    },
+    {
+      "name": "files_deleted",
+      "group": "size",
+      "label": "Files deleted",
+      "description": "Files removed entirely."
+    },
+    {
+      "name": "source_files_changed",
+      "group": "content",
+      "label": "Source files changed",
+      "description": "Application source files touched (not tests, docs, config or generated)."
+    },
+    {
+      "name": "test_files_changed",
+      "group": "content",
+      "label": "Test files changed",
+      "description": "Test files touched."
+    },
+    {
+      "name": "test_churn_ratio",
+      "group": "content",
+      "label": "Test churn ratio",
+      "description": "Test churn as a share of all churn."
+    },
+    {
+      "name": "untested_source_change",
+      "group": "content",
+      "label": "Source changed without tests",
+      "description": "1 if source files changed and no test file did."
+    },
+    {
+      "name": "config_files_changed",
+      "group": "content",
+      "label": "Config files changed",
+      "description": "CI, Docker, YAML/TOML/JSON and similar configuration files touched."
+    },
+    {
+      "name": "dependency_files_changed",
+      "group": "content",
+      "label": "Dependency files changed",
+      "description": "Package manifests and lockfiles touched."
+    },
+    {
+      "name": "languages_changed",
+      "group": "content",
+      "label": "Languages changed",
+      "description": "Distinct programming languages among changed source and test files."
+    },
+    {
+      "name": "is_fix",
+      "group": "purpose",
+      "label": "Is a bug fix",
+      "description": "1 if the title describes fixing a defect."
+    },
+    {
+      "name": "prior_changes_365d",
+      "group": "history",
+      "label": "Prior changes (1y)",
+      "description": "Distinct past changes to the touched files in the last year."
+    },
+    {
+      "name": "recent_changes_90d",
+      "group": "history",
+      "label": "Recent changes (90d)",
+      "description": "Distinct past changes to the touched files in the last 90 days."
+    },
+    {
+      "name": "prior_authors_365d",
+      "group": "history",
+      "label": "Prior authors (1y)",
+      "description": "Distinct people who changed the touched files in the last year."
+    },
+    {
+      "name": "prior_fixes_365d",
+      "group": "history",
+      "label": "Prior bug fixes (1y)",
+      "description": "Past bug-fix changes to the touched files in the last year."
+    },
+    {
+      "name": "mean_file_age_days",
+      "group": "history",
+      "label": "Days since files last changed",
+      "description": "Mean days since each touched file was last modified."
+    },
+    {
+      "name": "author_prior_changes",
+      "group": "experience",
+      "label": "Author's prior changes",
+      "description": "Changes the author previously landed in this repository."
+    },
+    {
+      "name": "author_recent_changes_90d",
+      "group": "experience",
+      "label": "Author's recent changes (90d)",
+      "description": "Changes the author landed in the last 90 days."
+    },
+    {
+      "name": "author_subsystem_changes",
+      "group": "experience",
+      "label": "Author's changes in these areas",
+      "description": "Prior changes by the author in the top-level directories this PR touches."
+    },
+    {
+      "name": "author_file_familiarity",
+      "group": "experience",
+      "label": "Author familiarity with files",
+      "description": "Share of the touched files the author has changed before."
+    },
+    {
+      "name": "author_ownership_share",
+      "group": "experience",
+      "label": "Author ownership share",
+      "description": "Share of last year's changes to the touched files that the author made."
+    }
+  ],
+  "seconds": 181.6
+}

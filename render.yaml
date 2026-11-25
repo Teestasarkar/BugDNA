@@ -1,0 +1,12 @@
+# One-click deploy on Render (free tier): the Docker image serves the API and the web app.
+# Free services sleep after ~15 minutes idle; the first request then takes ~30 s.
+services:
+  - type: web
+    name: pr-risk-radar
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false        # optional; set in the dashboard to lift live scoring past 60 requests/hour
