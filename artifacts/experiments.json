@@ -1,0 +1,106 @@
+{
+  "results": {
+    "v1: original 28": {
+      "val_roc_auc": 0.79,
+      "val_pr_auc": 0.574
+    },
+    "v2: all candidates": {
+      "val_roc_auc": 0.8022,
+      "val_pr_auc": 0.5954
+    },
+    "v2 without churn_per_file": {
+      "val_roc_auc": 0.8033,
+      "val_pr_auc": 0.5978
+    },
+    "v2 without is_feature": {
+      "val_roc_auc": 0.8026,
+      "val_pr_auc": 0.5963
+    },
+    "v2 without is_refactor": {
+      "val_roc_auc": 0.8028,
+      "val_pr_auc": 0.5975
+    },
+    "v2 without is_breaking": {
+      "val_roc_auc": 0.8028,
+      "val_pr_auc": 0.597
+    },
+    "v2 without prior_fix_ratio_365d": {
+      "val_roc_auc": 0.8026,
+      "val_pr_auc": 0.5976
+    },
+    "v2 without max_file_fixes_365d": {
+      "val_roc_auc": 0.8029,
+      "val_pr_auc": 0.5983
+    },
+    "v2 without repo_fix_share": {
+      "val_roc_auc": 0.7981,
+      "val_pr_auc": 0.5864
+    },
+    "v2 without repo_changes_30d": {
+      "val_roc_auc": 0.8021,
+      "val_pr_auc": 0.5957
+    },
+    "v2 without author_fix_share": {
+      "val_roc_auc": 0.8031,
+      "val_pr_auc": 0.5978
+    },
+    "v2 without source_lines_added": {
+      "val_roc_auc": 0.7967,
+      "val_pr_auc": 0.5862
+    },
+    "v2 without source_lines_deleted": {
+      "val_roc_auc": 0.8032,
+      "val_pr_auc": 0.5969
+    },
+    "v2 without days_since_last_fix": {
+      "val_roc_auc": 0.8024,
+      "val_pr_auc": 0.595
+    },
+    "v2 without author_days_since_last_change": {
+      "val_roc_auc": 0.8027,
+      "val_pr_auc": 0.5977
+    },
+    "v2: selected": {
+      "val_roc_auc": 0.8042,
+      "val_pr_auc": 0.6035
+    }
+  },
+  "kept": [
+    "repo_fix_share",
+    "repo_changes_30d",
+    "source_lines_added"
+  ],
+  "selected_features": [
+    "lines_added",
+    "lines_deleted",
+    "files_changed",
+    "dirs_changed",
+    "subsystems_changed",
+    "change_entropy",
+    "max_file_churn_share",
+    "deletion_ratio",
+    "files_added",
+    "files_deleted",
+    "source_files_changed",
+    "test_files_changed",
+    "test_churn_ratio",
+    "untested_source_change",
+    "config_files_changed",
+    "dependency_files_changed",
+    "languages_changed",
+    "is_fix",
+    "prior_changes_365d",
+    "recent_changes_90d",
+    "prior_authors_365d",
+    "prior_fixes_365d",
+    "mean_file_age_days",
+    "author_prior_changes",
+    "author_recent_changes_90d",
+    "author_subsystem_changes",
+    "author_file_familiarity",
+    "author_ownership_share",
+    "repo_fix_share",
+    "repo_changes_30d",
+    "source_lines_added"
+  ]
+}

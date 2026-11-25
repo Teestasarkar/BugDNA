@@ -12,7 +12,7 @@ import bisect
 from collections import Counter, defaultdict, deque
 
 from riskradar import paths
-from riskradar.features import FILE_HISTORY_DEPTH, Event
+from riskradar.features import FILE_HISTORY_DEPTH, RECENT_DEPTH, Event
 from riskradar.text import is_bug_fix, strip_pr_suffix
 
 from .gitlog import Commit
@@ -23,6 +23,8 @@ class LocalHistory:
         self._files: dict[str, deque[Event]] = defaultdict(lambda: deque(maxlen=FILE_HISTORY_DEPTH))
         self._author_times: dict[str, list[int]] = defaultdict(list)
         self._author_subsystem: Counter[tuple[str, str]] = Counter()
+        self._repo: deque[Event] = deque(maxlen=RECENT_DEPTH)
+        self._author_recent: dict[str, deque[Event]] = defaultdict(lambda: deque(maxlen=RECENT_DEPTH))
         self._now = -1
 
     # -- replay -----------------------------------------------------------------
@@ -35,6 +37,8 @@ class LocalHistory:
         for path in touched:
             self._files[path].appendleft(event)
         bisect.insort(self._author_times[commit.author_email], commit.timestamp)
+        self._repo.appendleft(event)
+        self._author_recent[commit.author_email].appendleft(event)
         for sub in {paths.subsystem(p) for p in touched}:
             if sub:
                 self._author_subsystem[(commit.author_email, sub)] += 1
@@ -54,3 +58,10 @@ class LocalHistory:
 
     def author_path_changes(self, authors: frozenset[str], path: str, before: int) -> int:
         return sum(self._author_subsystem[(a, path)] for a in authors)
+
+    def repo_events(self, before: int) -> list[Event]:
+        return list(self._repo)
+
+    def author_events(self, authors: frozenset[str], before: int) -> list[Event]:
+        events = [e for a in authors for e in self._author_recent.get(a, ())]
+        return sorted(events, key=lambda e: -e.timestamp)[:RECENT_DEPTH]

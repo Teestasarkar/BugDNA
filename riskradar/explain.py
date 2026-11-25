@@ -4,6 +4,10 @@ A factor is reported only if its SHAP value pushes risk *up* for this PR, so
 every remediation step answers "why is this PR risky", never "why is it safe".
 Each step quotes the PR's own value next to the dataset median, so the advice
 is specific to this PR and can be checked.
+
+`share` expresses a feature's SHAP value as a percentage of all the
+risk-raising SHAP mass for that PR ("38% of this PR's risk"). SHAP values are
+additive in log-odds, so shares of the positive part add up to 100%.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ class Factor:
     value: float | None
     median: float | None
     shap: float
+    share: float            # % of this PR's risk-raising SHAP mass
     finding: str
     remediation: str
 
@@ -140,8 +145,66 @@ TEMPLATES: dict[str, Template] = {
     "author_ownership_share": lambda v, m, c: (
         f"The author made {_pct(v)} of last year's changes to these files (median {_pct(m)}).",
         "Loop in the files' main contributors; they know the invariants the code depends on."),
+    "churn_per_file": lambda v, m, c: (
+        f"Each touched file changes by about {_n(v)} lines on average (median {_n(m)}).",
+        "Deep rewrites of a file are harder to review than small edits: walk reviewers through the rewritten files and keep behaviour-preserving moves in a separate commit."),
+    "is_feature": lambda v, m, c: (
+        "This PR adds new functionality." if v else "This PR is not described as a new feature.",
+        "New behaviour has no production mileage: put it behind a flag or staged rollout, and cover the edge cases with tests before merging."),
+    "is_refactor": lambda v, m, c: (
+        "This PR restructures existing code." if v else "This PR is not described as a refactor.",
+        "Refactors are meant to preserve behaviour: run the full suite, and keep the refactor separate from any behaviour change so a regression is easy to bisect."),
+    "is_breaking": lambda v, m, c: (
+        "The title marks this as a breaking change." if v else "This PR is not marked as breaking.",
+        "Search downstream callers and plugins for the changed contract, add a migration note, and ship it in a major release."),
+    "prior_fix_ratio_365d": lambda v, m, c: (
+        f"{_pct(v)} of last year's changes to these files were bug fixes (median {_pct(m)}).",
+        "A high fix share means this code keeps breaking: add tests that pin the behaviour of the fixed paths, and ask a recent fixer to review."),
+    "max_file_fixes_365d": lambda v, m, c: (
+        f"One of the touched files needed {_n(v)} bug fixes in the past year{_top_file(c)} (median {_n(m)}).",
+        "Treat that file as a hotspot: review its changes line by line and add a regression test for each behaviour you touch."),
+    "repo_fix_share": lambda v, m, c: (
+        f"{_pct(v)} of this repository's recent changes were bug fixes (median {_pct(m)}).",
+        "The codebase is in a fix-heavy phase: hold this PR to a stricter bar (tests for every change, a second reviewer) until the fix rate falls."),
+    "repo_changes_30d": lambda v, m, c: (
+        f"{_n(v)} of the repository's last 100 changes landed in the past 30 days (median {_n(m)}).",
+        "The codebase is moving quickly: rebase right before merging and re-run CI, since neighbouring changes may conflict in behaviour, not just in text."),
+    "author_fix_share": lambda v, m, c: (
+        f"{_pct(v)} of the author's recent changes were bug fixes (median {_pct(m)}).",
+        "The author has been working in fragile areas: get a second reviewer and add a regression test for the behaviour this PR touches."),
+    "source_lines_added": lambda v, m, c: (
+        f"Adds {_n(v)} lines of application code; the median PR adds {_n(m)}.",
+        "Most of the risk is new production code: split it into reviewable steps and make sure each new code path has a test."),
+    "source_lines_deleted": lambda v, m, c: (
+        f"Removes or rewrites {_n(v)} lines of application code (median {_n(m)}).",
+        "Rewritten production code is where later fixes land: check every caller of the changed functions and add tests that pin the old behaviour you meant to keep."),
+    "days_since_last_fix": lambda v, m, c: (
+        f"A touched file was bug-fixed {_n(v)} days ago (median {_n(m)}).",
+        "This code was broken very recently: read that fix first, make sure this PR does not undo it, and extend its regression test."
+        if v <= (m if m is not None else v) else "These files have not needed a fix for a while: keep it that way with tests around the behaviour you change."),
+    "author_days_since_last_change": lambda v, m, c: (
+        f"The author's previous change here was {_n(v)} days ago (median {_n(m)}).",
+        "The codebase has moved since the author last worked in it: review recent changes to these files and rebase before merging."),
 }
 assert set(TEMPLATES) == set(SPEC_BY_NAME), set(SPEC_BY_NAME) ^ set(TEMPLATES)
+
+
+# Features whose *low* values typically raise risk; their generic advice is the low-value branch.
+_LOW_IS_RISKY = {"days_since_last_fix", "test_files_changed", "test_churn_ratio", "author_prior_changes", "author_recent_changes_90d",
+                 "author_subsystem_changes", "author_file_familiarity", "author_ownership_share"}
+
+
+def recommendation(name: str) -> str:
+    """Generic remediation for a feature that raises risk, without PR-specific numbers (dataset summaries)."""
+    risky_value = 0.0 if name in _LOW_IS_RISKY else 1e9
+    return TEMPLATES[name](risky_value, 0.0, {})[1]
+
+
+def risk_shares(contributions: Mapping[str, float]) -> dict[str, float]:
+    """Each risk-raising feature's percentage of the total risk-raising SHAP mass (sums to 100)."""
+    pos = {k: v for k, v in contributions.items() if v > 0}
+    total = sum(pos.values())
+    return {k: 100.0 * v / total for k, v in pos.items()} if total > 0 else {}
 
 
 def top_factors(values: Mapping[str, float], contributions: Mapping[str, float],
@@ -153,6 +216,7 @@ def top_factors(values: Mapping[str, float], contributions: Mapping[str, float],
         return v is not None and not (isinstance(v, float) and math.isnan(v))
 
     # A missing value can still carry SHAP weight, but there is nothing to act on, so skip it.
+    shares = risk_shares(contributions)
     risky = sorted(((f, s) for f, s in contributions.items() if s > 0 and known(f)), key=lambda fs: -fs[1])[:k]
     factors = []
     for name, shap_value in risky:
@@ -163,5 +227,6 @@ def top_factors(values: Mapping[str, float], contributions: Mapping[str, float],
         finding, remediation = TEMPLATES[name](v_f, m_f, ctx)
         factors.append(Factor(feature=name, label=SPEC_BY_NAME[name].label,
                               value=None if math.isnan(v_f) else v_f, median=m_f,
-                              shap=round(float(shap_value), 4), finding=finding, remediation=remediation))
+                              shap=round(float(shap_value), 4), share=round(shares.get(name, 0.0), 1),
+                              finding=finding, remediation=remediation))
     return factors

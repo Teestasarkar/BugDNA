@@ -3,6 +3,18 @@
   "identical": 2,
   "results": [
     {
+      "pr": "psf/black#4551",
+      "differing": {},
+      "score_effect": {
+        "probability_mined": 0.0394,
+        "probability_live": 0.0394,
+        "percentile_mined": 12.8,
+        "percentile_live": 12.8,
+        "band_mined": "LOW",
+        "band_live": "LOW"
+      }
+    },
+    {
       "pr": "tokio-rs/tokio#7412",
       "differing": {
         "author_prior_changes": {
@@ -12,7 +24,35 @@
         "author_recent_changes_90d": {
           "live": 19.0,
           "mined": 12.0
+        },
+        "repo_fix_share": {
+          "live": 0.02,
+          "mined": 0.01
+        },
+        "repo_changes_30d": {
+          "live": 26.0,
+          "mined": 23.0
         }
+      },
+      "score_effect": {
+        "probability_mined": 0.0355,
+        "probability_live": 0.0365,
+        "percentile_mined": 10.8,
+        "percentile_live": 11.4,
+        "band_mined": "LOW",
+        "band_live": "LOW"
+      }
+    },
+    {
+      "pr": "encode/httpx#3571",
+      "differing": {},
+      "score_effect": {
+        "probability_mined": 0.0139,
+        "probability_live": 0.0139,
+        "percentile_mined": 1.3,
+        "percentile_live": 1.3,
+        "band_mined": "LOW",
+        "band_live": "LOW"
       }
     },
     {
@@ -30,16 +70,17 @@
           "live": 0.6666666666666666,
           "mined": 0.3333333333333333
         }
+      },
+      "score_effect": {
+        "probability_mined": 0.0517,
+        "probability_live": 0.0513,
+        "percentile_mined": 18.1,
+        "percentile_live": 18.0,
+        "band_mined": "LOW",
+        "band_live": "LOW"
       }
-    },
-    {
-      "pr": "psf/black#4551",
-      "differing": {}
-    },
-    {
-      "pr": "encode/httpx#3571",
-      "differing": {}
     }
   ],
-  "github_requests": 40
+  "github_requests": 48,
+  "note": "Differences come from GitHub's commits API counting commits that reached the branch through merges; training replays first-parent history."
 }

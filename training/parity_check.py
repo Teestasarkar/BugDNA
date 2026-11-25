@@ -57,7 +57,9 @@ def main(argv: list[str] | None = None) -> int:
                  for n in FEATURE_NAMES if not same(float(live["features"][n]), float(row[n]))}
         mismatched += bool(diffs)
         results.append({"pr": f"{row.repo}#{row.number}", "differing": diffs})
-        print(f"{url}: {'all 28 features match' if not diffs else f'{len(diffs)} differ: ' + ', '.join(diffs)}")
+        verdict = (f"all {len(FEATURE_NAMES)} features match" if not diffs
+                   else f"{len(diffs)} differ: " + ", ".join(diffs))
+        print(f"{url}: {verdict}")
     summary = {"checked": len(results), "identical": len(results) - mismatched, "results": results,
                "github_requests": client.calls}
     args.out.write_text(json.dumps(summary, indent=2))

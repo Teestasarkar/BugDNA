@@ -28,6 +28,28 @@ _BOT = re.compile(
 )
 
 
+_FEATURE = re.compile(
+    r"^(feat|feature)(\(|:|!)|\b(add|adds|added|adding|implement|implements|implemented|introduce|introduces"
+    r"|support|supports|new)\b", re.IGNORECASE)
+_REFACTOR = re.compile(
+    r"^refactor(\(|:|!)|\b(refactor|refactors|refactoring|refactored|cleanup|clean up|simplify|simplifies"
+    r"|restructure|reorgani[sz]e|rename|renames|extract|extracts|move|moves|migrate|migrates|consolidate)\b",
+    re.IGNORECASE)
+_BREAKING = re.compile(r"^\w+(\([^)]*\))?!:|\bbreaking\b", re.IGNORECASE)
+
+
+def is_feature(title: str) -> bool:
+    return bool(_FEATURE.search(title))
+
+
+def is_refactor(title: str) -> bool:
+    return bool(_REFACTOR.search(title))
+
+
+def is_breaking(title: str) -> bool:
+    return bool(_BREAKING.search(title))
+
+
 def is_bug_fix(title: str) -> bool:
     """True when a PR title describes fixing a defect (the Kamei et al. FIX signal)."""
     return bool(_FIX.search(title)) and not _NOT_DEFECT.search(title)

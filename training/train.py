@@ -8,8 +8,9 @@ Evaluation protocol (decided before looking at any test number):
     a repository it is evaluated on.
   * Hyperparameters, early stopping and the decision threshold are chosen on
     validation only. The test split is scored once, by the final model.
-  * The threshold maximises F1 on validation. Precision and recall are then
-    reported on test at that fixed threshold.
+  * Two operating points are fixed on validation: "balanced" maximises F1;
+    "high recall" is the highest threshold that still catches at least 80% of
+    validation defects. Precision and recall are reported on test at both.
   * Reported alongside: a size-only baseline, logistic regression on the same
     features, and leave-repositories-out cross-validation (how well the model
     transfers to a repository it has never seen).
@@ -18,7 +19,6 @@ Evaluation protocol (decided before looking at any test number):
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 import math
 import sys
@@ -82,6 +82,29 @@ def curve(xs: np.ndarray, ys: np.ndarray, n: int = 120) -> list[list[float]]:
     return [[round(float(xs[i]), 4), round(float(ys[i]), 4)] for i in idx]
 
 
+SEARCH_SIZE = 60
+HIGH_RECALL_TARGET = 0.80
+SEARCH_SPACE = {
+    "eta": [0.01, 0.02, 0.03, 0.05],
+    "max_depth": [2, 3, 4, 5, 6, 8],
+    "min_child_weight": [1, 3, 5, 10, 20],
+    "lambda": [0.5, 1.0, 3.0, 10.0],
+    "subsample": [0.6, 0.7, 0.8, 0.9, 1.0],
+    "colsample_bytree": [0.4, 0.6, 0.8, 1.0],
+    "gamma": [0.0, 0.5, 1.0, 2.0],
+}
+
+
+def sample_configs(n: int) -> list[dict]:
+    rng = np.random.default_rng(SEED)
+    out: list[dict] = []
+    while len(out) < n:
+        cfg = {k: v[int(rng.integers(len(v)))] for k, v in SEARCH_SPACE.items()}
+        if cfg not in out:
+            out.append(cfg)
+    return out
+
+
 def binary_metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> dict:
     pred = p >= threshold
     order = np.argsort(-p)
@@ -114,39 +137,44 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(df):,} PRs / {df.repo.nunique()} repos; train {len(tr):,} val {len(va):,} test {len(te):,}; "
           f"defect rate {df.label.mean():.1%}")
 
-    # -- hyperparameter search on validation AUC ----------------------------------------------
-    base = {"objective": "binary:logistic", "eval_metric": "auc", "tree_method": "hist", "eta": 0.03,
-            "subsample": 0.8, "colsample_bytree": 0.8, "seed": SEED, "nthread": 4}
-    grid = [(4, 5, 1.0)] if args.quick else list(itertools.product([3, 4, 5, 6], [1, 5, 20], [1.0, 10.0]))
+    # -- hyperparameter search on validation AUC (random search, fixed seed) -------------------
+    base = {"objective": "binary:logistic", "eval_metric": "auc", "tree_method": "hist", "seed": SEED,
+            "nthread": 4}
+    configs = [{"eta": 0.03, "max_depth": 4, "min_child_weight": 5, "lambda": 1.0, "subsample": 0.8,
+                "colsample_bytree": 0.8, "gamma": 0.0}] if args.quick else sample_configs(SEARCH_SIZE)
     search = []
     best = None
-    for depth, mcw, lam in grid:
-        params = {**base, "max_depth": depth, "min_child_weight": mcw, "lambda": lam}
+    for cfg in configs:
+        params = {**base, **cfg}
         booster = fit(params, dtr, dva)
         auc = roc_auc_score(va.label, predict(booster, dva))
-        search.append({"max_depth": depth, "min_child_weight": mcw, "lambda": lam,
-                       "trees": booster.best_iteration + 1, "val_auc": round(float(auc), 4)})
+        search.append({**cfg, "trees": booster.best_iteration + 1, "val_auc": round(float(auc), 4)})
         if best is None or auc > best[0]:
             best = (auc, params, booster)
     val_auc, params, booster = best
     n_trees = booster.best_iteration + 1
     booster = booster[:n_trees]          # drop the trees grown after the early-stopping point
-    print(f"best val AUC {val_auc:.4f} with depth={params['max_depth']} mcw={params['min_child_weight']} "
-          f"lambda={params['lambda']} trees={n_trees}")
+    print(f"best of {len(configs)} configs: val AUC {val_auc:.4f} with "
+          + ", ".join(f"{k}={params[k]}" for k in SEARCH_SPACE) + f", trees={n_trees}")
 
-    # -- threshold on validation ---------------------------------------------------------------
+    # -- operating points on validation ---------------------------------------------------------
     p_val = predict(booster, dva)
     prec, rec, thr = precision_recall_curve(va.label, p_val)
     f1 = 2 * prec[:-1] * rec[:-1] / np.clip(prec[:-1] + rec[:-1], 1e-12, None)
     threshold = float(thr[int(np.argmax(f1))])
+    reaches = np.where(rec[:-1] >= HIGH_RECALL_TARGET)[0]
+    high_recall_threshold = float(thr[reaches[-1]]) if len(reaches) else float(thr[0])
 
     # -- the one look at test ------------------------------------------------------------------
     p_test = predict(booster, dte)
     y_test = te.label.to_numpy()
     test = binary_metrics(y_test, p_test, threshold)
     val = binary_metrics(va.label.to_numpy(), p_val, threshold)
-    print(f"TEST  AUC {test['roc_auc']}  PR-AUC {test['pr_auc']}  precision {test['precision']}  "
-          f"recall {test['recall']}  (base rate {test['base_rate']}, threshold {threshold:.3f})")
+    test_hr = binary_metrics(y_test, p_test, high_recall_threshold)
+    val_hr = binary_metrics(va.label.to_numpy(), p_val, high_recall_threshold)
+    print(f"TEST  AUC {test['roc_auc']}  PR-AUC {test['pr_auc']}  balanced: precision {test['precision']} "
+          f"recall {test['recall']} | high-recall: precision {test_hr['precision']} recall {test_hr['recall']} "
+          f"(base rate {test['base_rate']})")
 
     # -- baselines -------------------------------------------------------------------------------
     size = (te.lines_added + te.lines_deleted).to_numpy()
@@ -204,7 +232,8 @@ def main(argv: list[str] | None = None) -> int:
                for n, v in tr[list(FEATURE_NAMES)].median().items()}
     val_sorted = np.sort(p_val)
     (args.out / "model_meta.json").write_text(json.dumps({
-        "features": list(FEATURE_NAMES), "threshold": threshold, "medians": medians,
+        "features": list(FEATURE_NAMES), "threshold": threshold, "high_recall_threshold": high_recall_threshold,
+        "medians": medians,
         "validation_probabilities": [round(float(x), 6) for x in val_sorted],
         "params": {k: v for k, v in params.items() if k != "nthread"}, "trees": n_trees,
     }))
@@ -212,9 +241,10 @@ def main(argv: list[str] | None = None) -> int:
     fpr, tpr, _ = roc_curve(y_test, p_test)
     pr_p, pr_r, _ = precision_recall_curve(y_test, p_test)
     fpr_s, tpr_s, _ = roc_curve(y_test, size)
-    flagged = p_test >= threshold
-    operating_point = {"fpr": round(float((flagged & (y_test == 0)).sum() / max(1, (y_test == 0).sum())), 4),
-                       "recall": test["recall"], "precision": test["precision"]}
+    def operating_point(t: float, m: dict) -> dict:
+        flagged = p_test >= t
+        fpr_t = float((flagged & (y_test == 0)).sum() / max(1, (y_test == 0).sum()))
+        return {"fpr": round(fpr_t, 4), "recall": m["recall"], "precision": m["precision"]}
     dates = {s: [str(g.merged_at.min())[:10], str(g.merged_at.max())[:10]] for s, g in df.groupby("split")}
     metrics = {
         "dataset": {"prs": int(len(df)), "repos": int(df.repo.nunique()),
@@ -222,16 +252,19 @@ def main(argv: list[str] | None = None) -> int:
                     "features": len(FEATURE_NAMES), "split_sizes": {s: int((df.split == s).sum()) for s in
                                                                     ("train", "val", "test")},
                     "split_dates": dates, "languages_note": "see data/repos.json"},
-        "model": {"algorithm": "XGBoost (binary:logistic)", **{k: params[k] for k in
-                  ("max_depth", "min_child_weight", "lambda", "eta", "subsample", "colsample_bytree")},
+        "model": {"algorithm": "XGBoost (binary:logistic)", **{k: params[k] for k in SEARCH_SPACE},
+                  "configs_searched": len(configs),
                   "trees": n_trees, "validation_roc_auc": round(float(val_auc), 4)},
         "threshold": round(threshold, 4), "test": test, "validation": val, "baselines": baselines,
+        "high_recall": {"target_recall": HIGH_RECALL_TARGET, "threshold": round(high_recall_threshold, 4),
+                        "test": test_hr, "validation": val_hr},
         "cross_project": cross_project, "search": search, "shap_max_abs_diff_vs_shap_package": shap_check,
         "importance": importance, "per_repo": per_repo,
         "curves": {"roc": curve(fpr, tpr), "pr": curve(pr_r[::-1], pr_p[::-1]),
-                   "roc_size_only": curve(fpr_s, tpr_s), "operating_point": operating_point},
+                   "roc_size_only": curve(fpr_s, tpr_s), "operating_point": operating_point(threshold, test),
+                   "operating_point_high_recall": operating_point(high_recall_threshold, test_hr)},
         "feature_specs": [{"name": f.name, "group": f.group, "label": f.label, "description": f.description}
-                          for f in FEATURES],
+                          for f in FEATURES if f.name in FEATURE_NAMES],
         "seconds": round(time.time() - t0, 1),
     }
     (args.out / "metrics.json").write_text(json.dumps(metrics, indent=2))

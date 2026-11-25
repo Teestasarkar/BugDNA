@@ -6,6 +6,8 @@
   file_events          GET /repos/{o}/{r}/commits?path=..&until=..&per_page=100
   author_changes       GET /repos/{o}/{r}/commits?author=..&until=..[&since=..]&per_page=1  (count via Link)
   author_path_changes  GET /repos/{o}/{r}/commits?author=..&path=<dir>&until=..&per_page=1
+  repo_events          GET /repos/{o}/{r}/commits?until=..&per_page=100
+  author_events        GET /repos/{o}/{r}/commits?author=..&until=..&per_page=100
 
 Authors are identified by commit e-mail, exactly as in training (a GitHub login
 would merge a person's several e-mails and overstate their experience relative
@@ -13,7 +15,7 @@ to what the model learned). For a merged PR that is the squash commit's author
 e-mail; for an open PR, the e-mail on the author's latest base-branch commit,
 which is what GitHub will most likely use when squashing.
 
-A typical PR costs ~20 requests. Unauthenticated, GitHub allows 60 per hour per
+A typical PR costs ~22 requests. Unauthenticated, GitHub allows 60 per hour per
 IP, so set GITHUB_TOKEN (a fine-grained token with no permissions is enough for
 public repositories) for anything beyond a demo.
 """
@@ -30,6 +32,7 @@ import httpx
 
 from riskradar.features import (
     FILE_HISTORY_DEPTH,
+    RECENT_DEPTH,
     Event,
     FileChange,
     PRChange,
@@ -111,9 +114,8 @@ class GitHubHistory:
         self.c, self.base, self.branch = client, f"/repos/{owner}/{repo}", branch
         self.author_query = email
 
-    def file_events(self, path: str, before: int) -> list[Event]:
-        r = self.c.get(f"{self.base}/commits", {"sha": self.branch, "path": path, "until": _iso(before - 1),
-                                                "per_page": FILE_HISTORY_DEPTH})
+    def _events(self, params: dict, depth: int) -> list[Event]:
+        r = self.c.get(f"{self.base}/commits", {"sha": self.branch, "per_page": depth, **params})
         events = []
         for item in r.json():
             commit = item["commit"]
@@ -122,6 +124,17 @@ class GitHubHistory:
             events.append(Event(sha=item["sha"], timestamp=_ts(commit["committer"]["date"]),
                                 author=email, is_fix=is_bug_fix(title)))
         return events
+
+    def file_events(self, path: str, before: int) -> list[Event]:
+        return self._events({"path": path, "until": _iso(before - 1)}, FILE_HISTORY_DEPTH)
+
+    def repo_events(self, before: int) -> list[Event]:
+        return self._events({"until": _iso(before - 1)}, RECENT_DEPTH)
+
+    def author_events(self, authors: frozenset[str], before: int) -> list[Event]:
+        if not self.author_query:
+            return []
+        return self._events({"author": self.author_query, "until": _iso(before - 1)}, RECENT_DEPTH)
 
     def author_changes(self, authors: frozenset[str], before: int, since: int | None = None) -> int:
         if not self.author_query:

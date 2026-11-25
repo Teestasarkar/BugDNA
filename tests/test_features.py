@@ -6,7 +6,16 @@ import pytest
 
 from riskradar import paths
 from riskradar.explain import top_factors
-from riskradar.features import DAY, FEATURE_NAMES, Event, FileChange, PRChange, compute_features, history_files
+from riskradar.features import (
+    ALL_FEATURE_NAMES,
+    DAY,
+    FEATURE_NAMES,
+    Event,
+    FileChange,
+    PRChange,
+    compute_features,
+    history_files,
+)
 from riskradar.text import is_bot, is_bug_fix, squash_pr_number, strip_pr_suffix
 
 T = 1_750_000_000
@@ -17,6 +26,8 @@ class FakeHistory:
         self.files = files
         self.author_counts = author_counts or {}
         self.queried: list[str] = []
+        self.repo: list[Event] = []
+        self.mine: list[Event] = []
 
     def file_events(self, path: str, before: int) -> list[Event]:
         self.queried.append(path)
@@ -27,6 +38,12 @@ class FakeHistory:
 
     def author_path_changes(self, authors, path, before):
         return 3
+
+    def repo_events(self, before):
+        return self.repo
+
+    def author_events(self, authors, before):
+        return self.mine
 
 
 @pytest.mark.parametrize(("path", "kind"), [
@@ -82,7 +99,7 @@ def test_diff_features() -> None:
         FileChange("pyproject.toml", 1, 1),
     ])
     f = compute_features(change, FakeHistory({}))
-    assert len(f) == 28 and list(f) == list(FEATURE_NAMES)
+    assert list(f) == list(ALL_FEATURE_NAMES) and set(FEATURE_NAMES) <= set(f)
     assert f["lines_added"] == 61 and f["lines_deleted"] == 11
     assert f["files_changed"] == 4 and f["files_added"] == 1
     assert f["subsystems_changed"] == 3            # src, tests, root
@@ -133,3 +150,33 @@ def test_top_factors_only_report_risk_raising_features() -> None:
     assert [f.feature for f in factors] == ["lines_added", "prior_fixes_365d", "files_changed"]
     assert "900" in factors[0].finding and "40" in factors[0].finding
     assert all(f.remediation for f in factors)
+
+
+def test_v2_features_repo_author_and_title() -> None:
+    hist = FakeHistory({
+        "src/a.py": [Event("f1", T - 5 * DAY, "bob@x", True), Event("f2", T - 50 * DAY, "bob@x", True),
+                     Event("c1", T - 60 * DAY, "alice@x", False)],
+        "src/b.py": [Event("f3", T - 5 * DAY, "bob@x", True)],
+    })
+    hist.repo = [Event(f"r{i}", T - i * DAY, "x@x", i % 4 == 0) for i in range(1, 41)]   # 10 of 40 are fixes
+    hist.mine = [Event("m1", T - DAY, "alice@x", True), Event("m2", T - 9 * DAY, "alice@x", False)]
+    change = _change([FileChange("src/a.py", 30, 10), FileChange("src/b.py", 0, 20)],
+                     title="feat(core)!: add streaming parser")
+    f = compute_features(change, hist)
+    assert f["churn_per_file"] == pytest.approx(30)
+    assert (f["is_feature"], f["is_refactor"], f["is_breaking"], f["is_fix"]) == (1, 0, 1, 0)
+    assert f["prior_fix_ratio_365d"] == pytest.approx(3 / 4)
+    assert f["max_file_fixes_365d"] == 2
+    assert f["repo_fix_share"] == pytest.approx(10 / 40)
+    assert f["repo_changes_30d"] == 30
+    assert f["author_fix_share"] == pytest.approx(0.5)
+    assert (f["source_lines_added"], f["source_lines_deleted"]) == (30, 30)
+    assert f["days_since_last_fix"] == pytest.approx(5)
+    assert f["author_days_since_last_change"] == pytest.approx(1)
+
+
+def test_v2_features_missing_history_is_missing_not_zero() -> None:
+    f = compute_features(_change([FileChange("src/a.py", 1, 1)], authors=()), FakeHistory({}))
+    assert math.isnan(f["repo_fix_share"]) and math.isnan(f["author_fix_share"])
+    assert math.isnan(f["prior_fix_ratio_365d"])
+    assert math.isnan(f["days_since_last_fix"]) and math.isnan(f["author_days_since_last_change"])

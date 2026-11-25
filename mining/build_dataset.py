@@ -29,10 +29,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from riskradar import paths
-from riskradar.features import FEATURE_NAMES, PRChange, compute_features
+from riskradar.features import ALL_FEATURE_NAMES, PRChange, compute_features
 from riskradar.text import is_bot, is_bug_fix, squash_pr_number, strip_pr_suffix
 
-from .gitlog import first_parent_commits
+from .gitlog import Commit, first_parent_commits
 from .history import LocalHistory
 from .szz import run_szz
 
@@ -47,6 +47,23 @@ def _ts(date: str) -> int:
 
 def _author_hash(email: str) -> str:
     return hashlib.sha256(email.encode()).hexdigest()[:12]
+
+
+def featurize(commits: list[Commit], selected: set[int]) -> dict[int, dict[str, float]]:
+    """Replay history oldest-first; each selected PR's features see only the state before it merged."""
+    hist = LocalHistory()
+    features: dict[int, dict[str, float]] = {}
+    for i, c in enumerate(commits):
+        if i in selected:
+            change = PRChange(title=strip_pr_suffix(c.subject), authors=frozenset({c.author_email}),
+                              timestamp=c.timestamp, files=c.files)
+            features[i] = compute_features(change, hist)
+        hist.apply(c)
+    return features
+
+
+def feature_cells(values: dict[str, float]) -> dict[str, float | str]:
+    return {k: ("" if v != v else v) for k, v in values.items()}   # NaN -> empty cell
 
 
 def process_repo(slug: str, clone: Path, cutoff: int, per_repo: int, workers: int) -> tuple[list[dict], dict]:
@@ -77,14 +94,7 @@ def process_repo(slug: str, clone: Path, cutoff: int, per_repo: int, workers: in
         return [], stats
 
     sel = set(selected)
-    hist = LocalHistory()
-    features: dict[int, dict[str, float]] = {}
-    for i, c in enumerate(commits):
-        if i in sel:
-            change = PRChange(title=strip_pr_suffix(c.subject), authors=frozenset({c.author_email}),
-                              timestamp=c.timestamp, files=c.files)
-            features[i] = compute_features(change, hist)
-        hist.apply(c)
+    features = featurize(commits, sel)
 
     first = selected[0]
     fixes = [c for i, c in enumerate(commits)
@@ -119,7 +129,7 @@ def process_repo(slug: str, clone: Path, cutoff: int, per_repo: int, workers: in
             "author_hash": _author_hash(c.author_email), "title": strip_pr_suffix(c.subject),
             "top_files": ";".join(f.path for f in top),
             "label": int(i in fixed_by), "fixed_by": " ".join(sorted(set(fixed_by.get(i, [])))),
-            **{k: ("" if v != v else v) for k, v in features[i].items()},   # NaN -> empty cell
+            **feature_cells(features[i]),
         })
     stats.update({
         "first_selected_merged_at": rows[0]["merged_at"], "last_selected_merged_at": rows[-1]["merged_at"],
@@ -162,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
         stats_path.write_text(json.dumps(stats, indent=2))
         tmp = csv_path.with_suffix(".tmp")
         with tmp.open("w", newline="", encoding="utf-8") as fh:
-            w = csv.DictWriter(fh, fieldnames=META_COLUMNS + list(FEATURE_NAMES))
+            w = csv.DictWriter(fh, fieldnames=META_COLUMNS + list(ALL_FEATURE_NAMES))
             w.writeheader()
             w.writerows(rows)
         tmp.replace(csv_path)

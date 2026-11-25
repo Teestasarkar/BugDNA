@@ -20,84 +20,102 @@ later bug fixes back to the PRs whose lines they had to change (SZZ).
 
 | Held-out test | Value |
 |---|---|
-| ROC-AUC | **0.773** |
-| PR-AUC (base rate 0.185) | **0.507** |
-| Precision at the validation-chosen threshold | **39.8%** |
-| Recall at that threshold | **60.5%** (402 of 665 defect-inducing PRs) |
-| PRs flagged at that threshold | 28.1% |
-| Recall when reviewing only the riskiest 20% | 49.3% |
-| Precision among the riskiest 10% | 60.8% (3.3x base rate) |
-| ROC-AUC on repositories never seen in training (5-fold, grouped by repo) | 0.778 ± 0.008 |
+| ROC-AUC | **0.783** |
+| PR-AUC (base rate 0.185) | **0.519** |
+| **Balanced mode** (threshold = max F1 on validation): defect-causing PRs caught | **62.7%** (417 of 665) |
+| Balanced mode: precision | **38.6%** (flags 30.0% of PRs) |
+| **High-recall mode** (threshold catching 80% of validation defects): caught | **79.4%** (528 of 665) |
+| High-recall mode: precision | **31.0%** (flags 47.3% of PRs) |
+| Recall when reviewing only the riskiest 20% | 50.1% |
+| Precision among the riskiest 10% | 62.5% (3.4x base rate) |
+| ROC-AUC on repositories never seen in training (5-fold, grouped by repo) | 0.793 ± 0.005 |
 
 | Same test split | ROC-AUC | PR-AUC |
 |---|---|---|
 | Random | 0.500 | 0.185 |
 | Lines changed (bigger = riskier) | 0.702 | 0.351 |
-| Logistic regression, same 28 features | 0.769 | 0.480 |
-| **XGBoost, 28 features** | **0.773** | **0.507** |
+| Logistic regression, same 31 features | 0.782 | 0.501 |
+| **XGBoost, 31 features** | **0.783** | **0.519** |
 
-Model: 786 trees, depth 3, min child weight 1, L2 1.0, chosen on validation ROC-AUC 0.790. Decision threshold 0.279 (max F1 on validation).
+Model: 521 trees, depth 2, learning rate 0.05, min child weight 5, L2 10.0, best of 60 configurations by validation ROC-AUC (0.806). Thresholds: balanced 0.270, high recall 0.168.
+
+**Reading these numbers honestly**
+
+- *Most of the signal is in the features, not the model class.* Logistic regression on the same 31 features reaches 0.782 ROC-AUC against XGBoost's 0.783; XGBoost's edge shows more at the top of the ranking (PR-AUC 0.519 vs 0.501). Both clear the lines-changed heuristic (0.702) by a wide margin.
+- *The newest PRs had the least time to be found faulty.* The test split's defect rate (18.5%) is below validation's (22.2%), partly because its PRs had fewer months for fixes to land, so some test "false alarms" are probably defects nobody has fixed yet.
+- *Precision and recall trade off along one curve.* Both modes are points on the same model's curve, fixed on validation before the test split was scored; a reviewer chooses how many PRs they can afford to look at, not a better model.
 
 Top risk drivers (mean |SHAP| on the test split):
 
-1. Prior bug fixes (1y) (`prior_fixes_365d`): 0.569
-2. Lines added (`lines_added`): 0.534
-3. Prior changes (1y) (`prior_changes_365d`): 0.340
-4. Source files changed (`source_files_changed`): 0.263
-5. Lines deleted (`lines_deleted`): 0.225
-6. Is a bug fix (`is_fix`): 0.210
-7. Days since files last changed (`mean_file_age_days`): 0.130
-8. Author's prior changes (`author_prior_changes`): 0.130
+1. Source lines added (`source_lines_added`): 0.629
+2. Prior bug fixes (1y) (`prior_fixes_365d`): 0.351
+3. Repository fix share (`repo_fix_share`): 0.343
+4. Is a bug fix (`is_fix`): 0.202
+5. Prior changes (1y) (`prior_changes_365d`): 0.158
+6. Lines added (`lines_added`): 0.133
+7. Lines deleted (`lines_deleted`): 0.118
+8. Author's prior changes (`author_prior_changes`): 0.107
+
+**Model history.** v1 (28 features, 24-configuration grid) and v2 (31 features, 60-configuration random search) were both evaluated on the same test split. Every v2 change was chosen on validation (`training/experiments.py`, `artifacts/experiments.json`), but the test split has now been looked at twice, so treat the v2 figures as slightly optimistic.
+
+| Held-out test | v1 | v2 |
+|---|---|---|
+| ROC-AUC | 0.773 | 0.783 |
+| PR-AUC | 0.507 | 0.519 |
+| Caught (balanced mode) | 60.5% | 62.7% |
+| Precision (balanced mode) | 39.8% | 38.6% |
+| Precision among the riskiest 10% | 60.8% | 62.5% |
+| Unseen repositories ROC-AUC | 0.778 | 0.793 |
 
 <details><summary>Per-repository results</summary>
 
 | Repository | PRs | Defect rate | Test PRs | Test ROC-AUC |
 |---|---|---|---|---|
-| [encode/httpx](https://github.com/encode/httpx) | 400 | 4.5% | 80 | 0.95 |
-| [encode/starlette](https://github.com/encode/starlette) | 400 | 7.2% | 80 | 0.66 |
-| [encode/uvicorn](https://github.com/encode/uvicorn) | 400 | 7.5% | 80 | 0.86 |
-| [fastapi/fastapi](https://github.com/fastapi/fastapi) | 400 | 22.0% | 80 | 0.85 |
-| [pydantic/pydantic](https://github.com/pydantic/pydantic) | 400 | 9.2% | 80 | 0.63 |
-| [python-poetry/poetry](https://github.com/python-poetry/poetry) | 400 | 20.5% | 80 | 0.78 |
-| [astral-sh/uv](https://github.com/astral-sh/uv) | 400 | 9.0% | 80 | 0.75 |
-| [astral-sh/ruff](https://github.com/astral-sh/ruff) | 400 | 29.8% | 80 | 0.78 |
-| [psf/black](https://github.com/psf/black) | 400 | 18.8% | 80 | 0.78 |
-| [python/mypy](https://github.com/python/mypy) | 400 | 15.5% | 80 | 0.69 |
-| [aio-libs/aiohttp](https://github.com/aio-libs/aiohttp) | 400 | 21.2% | 80 | 0.81 |
-| [PrefectHQ/prefect](https://github.com/PrefectHQ/prefect) | 400 | 17.8% | 80 | 0.59 |
-| [mlflow/mlflow](https://github.com/mlflow/mlflow) | 400 | 24.2% | 80 | 0.86 |
-| [huggingface/datasets](https://github.com/huggingface/datasets) | 400 | 18.5% | 80 | 0.76 |
-| [vitejs/vite](https://github.com/vitejs/vite) | 400 | 22.0% | 80 | 0.64 |
-| [vuejs/core](https://github.com/vuejs/core) | 400 | 30.0% | 80 | 0.65 |
-| [tailwindlabs/tailwindcss](https://github.com/tailwindlabs/tailwindcss) | 400 | 13.8% | 80 | 0.72 |
-| [prettier/prettier](https://github.com/prettier/prettier) | 400 | 8.0% | 80 | 0.83 |
+| [encode/httpx](https://github.com/encode/httpx) | 400 | 4.5% | 80 | 0.97 |
+| [encode/starlette](https://github.com/encode/starlette) | 400 | 7.2% | 80 | 0.64 |
+| [encode/uvicorn](https://github.com/encode/uvicorn) | 400 | 7.5% | 80 | 0.88 |
+| [fastapi/fastapi](https://github.com/fastapi/fastapi) | 400 | 22.0% | 80 | 0.77 |
+| [pydantic/pydantic](https://github.com/pydantic/pydantic) | 400 | 9.2% | 80 | 0.65 |
+| [python-poetry/poetry](https://github.com/python-poetry/poetry) | 400 | 20.5% | 80 | 0.81 |
+| [astral-sh/uv](https://github.com/astral-sh/uv) | 400 | 9.0% | 80 | 0.79 |
+| [astral-sh/ruff](https://github.com/astral-sh/ruff) | 400 | 29.8% | 80 | 0.79 |
+| [psf/black](https://github.com/psf/black) | 400 | 18.8% | 80 | 0.82 |
+| [python/mypy](https://github.com/python/mypy) | 400 | 15.5% | 80 | 0.72 |
+| [aio-libs/aiohttp](https://github.com/aio-libs/aiohttp) | 400 | 21.2% | 80 | 0.83 |
+| [PrefectHQ/prefect](https://github.com/PrefectHQ/prefect) | 400 | 17.8% | 80 | 0.62 |
+| [mlflow/mlflow](https://github.com/mlflow/mlflow) | 400 | 24.2% | 80 | 0.89 |
+| [huggingface/datasets](https://github.com/huggingface/datasets) | 400 | 18.5% | 80 | 0.75 |
+| [vitejs/vite](https://github.com/vitejs/vite) | 400 | 22.0% | 80 | 0.68 |
+| [vuejs/core](https://github.com/vuejs/core) | 400 | 30.0% | 80 | 0.74 |
+| [tailwindlabs/tailwindcss](https://github.com/tailwindlabs/tailwindcss) | 400 | 13.8% | 80 | 0.69 |
+| [prettier/prettier](https://github.com/prettier/prettier) | 400 | 8.0% | 80 | 0.78 |
 | [eslint/eslint](https://github.com/eslint/eslint) | 400 | 16.8% | 80 | 0.76 |
 | [trpc/trpc](https://github.com/trpc/trpc) | 400 | 32.5% | 80 | 0.76 |
-| [vercel/swr](https://github.com/vercel/swr) | 400 | 39.8% | 80 | 0.74 |
-| [facebook/react](https://github.com/facebook/react) | 400 | 16.5% | 80 | 0.80 |
-| [honojs/hono](https://github.com/honojs/hono) | 400 | 32.0% | 80 | 0.69 |
-| [excalidraw/excalidraw](https://github.com/excalidraw/excalidraw) | 400 | 43.5% | 80 | 0.87 |
-| [vitest-dev/vitest](https://github.com/vitest-dev/vitest) | 400 | 41.8% | 80 | 0.79 |
-| [gin-gonic/gin](https://github.com/gin-gonic/gin) | 400 | 13.0% | 80 | 0.41 |
-| [caddyserver/caddy](https://github.com/caddyserver/caddy) | 400 | 12.0% | 80 | 0.64 |
-| [golangci/golangci-lint](https://github.com/golangci/golangci-lint) | 400 | 17.8% | 80 | 0.68 |
-| [tokio-rs/tokio](https://github.com/tokio-rs/tokio) | 400 | 4.0% | 80 | 0.89 |
-| [tokio-rs/axum](https://github.com/tokio-rs/axum) | 400 | 10.2% | 80 | 0.69 |
-| [nushell/nushell](https://github.com/nushell/nushell) | 400 | 24.8% | 80 | 0.82 |
+| [vercel/swr](https://github.com/vercel/swr) | 400 | 39.8% | 80 | 0.73 |
+| [facebook/react](https://github.com/facebook/react) | 400 | 16.5% | 80 | 0.81 |
+| [honojs/hono](https://github.com/honojs/hono) | 400 | 32.0% | 80 | 0.60 |
+| [excalidraw/excalidraw](https://github.com/excalidraw/excalidraw) | 400 | 43.5% | 80 | 0.88 |
+| [vitest-dev/vitest](https://github.com/vitest-dev/vitest) | 400 | 41.8% | 80 | 0.77 |
+| [gin-gonic/gin](https://github.com/gin-gonic/gin) | 400 | 13.0% | 80 | 0.47 |
+| [caddyserver/caddy](https://github.com/caddyserver/caddy) | 400 | 12.0% | 80 | 0.74 |
+| [golangci/golangci-lint](https://github.com/golangci/golangci-lint) | 400 | 17.8% | 80 | 0.72 |
+| [tokio-rs/tokio](https://github.com/tokio-rs/tokio) | 400 | 4.0% | 80 | 0.87 |
+| [tokio-rs/axum](https://github.com/tokio-rs/axum) | 400 | 10.2% | 80 | 0.70 |
+| [nushell/nushell](https://github.com/nushell/nushell) | 400 | 24.8% | 80 | 0.84 |
 | [tauri-apps/tauri](https://github.com/tauri-apps/tauri) | 400 | 35.8% | 80 | 0.74 |
-| [starship/starship](https://github.com/starship/starship) | 400 | 27.5% | 80 | 0.69 |
-| [square/okhttp](https://github.com/square/okhttp) | 400 | 10.0% | 80 | 0.84 |
-| [redis/redis](https://github.com/redis/redis) | 400 | 19.8% | 80 | 0.75 |
-| [valkey-io/valkey](https://github.com/valkey-io/valkey) | 400 | 15.8% | 80 | 0.92 |
+| [starship/starship](https://github.com/starship/starship) | 400 | 27.5% | 80 | 0.71 |
+| [square/okhttp](https://github.com/square/okhttp) | 400 | 10.0% | 80 | 0.88 |
+| [redis/redis](https://github.com/redis/redis) | 400 | 19.8% | 80 | 0.78 |
+| [valkey-io/valkey](https://github.com/valkey-io/valkey) | 400 | 15.8% | 80 | 0.90 |
 | [getsentry/sentry-python](https://github.com/getsentry/sentry-python) | 400 | 24.2% | 80 | 0.71 |
-| [pydantic/pydantic-core](https://github.com/pydantic/pydantic-core) | 400 | 21.8% | 80 | 0.74 |
+| [pydantic/pydantic-core](https://github.com/pydantic/pydantic-core) | 400 | 21.8% | 80 | 0.77 |
 | [tokio-rs/tracing](https://github.com/tokio-rs/tracing) | 400 | 9.0% | 80 | 0.70 |
-| [pmndrs/jotai](https://github.com/pmndrs/jotai) | 400 | 40.5% | 80 | 0.80 |
-| [react-hook-form/react-hook-form](https://github.com/react-hook-form/react-hook-form) | 400 | 43.0% | 80 | 0.70 |
-| [fastify/fastify](https://github.com/fastify/fastify) | 400 | 25.2% | 80 | 0.72 |
-| [TanStack/router](https://github.com/TanStack/router) | 400 | 48.0% | 80 | 0.74 |
-| [marimo-team/marimo](https://github.com/marimo-team/marimo) | 400 | 39.0% | 80 | 0.84 |
-| [reflex-dev/reflex](https://github.com/reflex-dev/reflex) | 400 | 14.8% | 80 | 0.75 |
+| [pmndrs/jotai](https://github.com/pmndrs/jotai) | 400 | 40.5% | 80 | 0.84 |
+| [react-hook-form/react-hook-form](https://github.com/react-hook-form/react-hook-form) | 400 | 43.0% | 80 | 0.75 |
+| [fastify/fastify](https://github.com/fastify/fastify) | 400 | 25.2% | 80 | 0.75 |
+| [TanStack/router](https://github.com/TanStack/router) | 400 | 48.0% | 80 | 0.71 |
+| [marimo-team/marimo](https://github.com/marimo-team/marimo) | 400 | 39.0% | 80 | 0.85 |
+| [reflex-dev/reflex](https://github.com/reflex-dev/reflex) | 400 | 14.8% | 80 | 0.80 |
 
 </details>
 
@@ -105,7 +123,7 @@ Top risk drivers (mean |SHAP| on the test split):
 
 These numbers come from `artifacts/metrics.json` via `python -m training.report`; none are typed by hand.
 
-### Reading the numbers honestly
+### More caveats
 
 - **The label is "a later bug fix changed lines this PR wrote."** It is the standard proxy in just-in-time defect
   prediction (SZZ), not ground truth. Some real defects are never fixed or are fixed by adding code that cannot
@@ -116,12 +134,6 @@ These numbers come from `artifacts/metrics.json` via `python -m training.report`
   repository's own future into training and inflate every metric.
 - **Bots and docs-only PRs are excluded.** They cannot be defect-inducing under this labelling, and leaving them
   in would add thousands of easy negatives that make any model look better.
-- **Most of the signal is in the features, not the model class.** XGBoost beats logistic regression on the same
-  28 features by only 0.004 ROC-AUC; its clearer gain is at the top of the ranking (PR-AUC 0.507 vs 0.480),
-  which is where a reviewer's attention goes. Both beat the "bigger PRs are riskier" heuristic by a wide margin.
-- **The newest PRs had the least time to be found faulty.** The test split's defect rate (18.5%) is below
-  validation's (22.2%), partly because its PRs had fewer months for fixes to land. Some test "false alarms" are
-  probably defects nobody has fixed yet.
 - **"Unseen repositories" is the number for live scoring.** When you score a PR from a repository outside the
   dataset, expect the leave-repos-out figure, not the in-repo test figure.
 
@@ -130,19 +142,26 @@ These numbers come from `artifacts/metrics.json` via `python -m training.report`
 ## What it does
 
 ```
-GitHub PR ──► diff + base-branch history ──► 28 features ──► XGBoost ──► probability
+GitHub PR ──► diff + base-branch history ──► 31 features ──► XGBoost ──► probability
                                                                    │
                                      exact TreeSHAP per feature ◄──┘
                                                 │
-                     top 3 risk-raising factors + remediation rules ──► web UI / JSON API
+         % share of risk per feature, top 3 factors + remediation ──► web UI / JSON API
+                                                │
+         summed across flagged / defect-causing PRs ──► "Risk drivers" dashboard
 ```
 
 - **Overview dashboard:** held-out ROC and precision-recall curves, comparison with baselines, global SHAP
   importance, per-repository results.
 - **PR explorer:** all 18,000 PRs with their score and what actually happened. Filter to *caught*, *missed*,
   *false alarm* or *clean*, and follow links to the fix PRs that SZZ traced.
-- **PR detail:** score (a percentile against validation PRs), band, the top 3 risk factors with remediation,
-  and a SHAP breakdown of all 28 features.
+- **PR detail:** score (a percentile against validation PRs), band, both operating modes, the top 3 risk
+  factors each with its **percentage of the PR's risk** and a remediation step, a risk-composition bar, and the
+  SHAP breakdown of every feature.
+- **Risk drivers:** SHAP summed across a population (flagged, defect-causing, caught or missed PRs, optionally
+  one repository). It shows each feature's average share of risk, how many PRs it is the #1 driver for, the
+  typical value against the dataset median, and the recommended fix. Each driver links to its PRs in the
+  explorer.
 - **Analyze a PR:** paste any public GitHub PR URL. The server reads it through the GitHub API, computes the
   same features with the same code used in training, and explains the score.
 
@@ -150,7 +169,7 @@ GitHub PR ──► diff + base-branch history ──► 28 features ──► X
 
 The live scorer and the offline miner call the same `riskradar.features.compute_features`; only the source of
 history differs (a git clone vs. the GitHub REST API). `python -m training.parity_check` re-derives dataset PRs
-through the API and diffs all 28 features against the mined values. See [Verification](#verification).
+through the API and diffs every model feature against the mined value. See [Verification](#verification).
 
 ---
 
@@ -163,18 +182,23 @@ through the API and diffs all 28 features against the mined values. See [Verific
 | Pick PRs | [`mining/build_dataset.py`](mining/build_dataset.py) | Squash commits `Title (#123)` by humans that touch source code and merged before **2025-09-01**. The latest 400 per repo. |
 | Featurize | [`riskradar/features.py`](riskradar/features.py) | History is replayed oldest-first, so each PR's features see only what existed before it merged. |
 | Label | [`mining/szz.py`](mining/szz.py) | For every later bug-fix commit (title keywords, excluding typo/lint/docs/test "fixes"), `git blame -w` the deleted or modified source lines at the fix's parent, honouring `.git-blame-ignore-revs`. A blamed PR is defect-inducing. Fixes are searched through each repository's latest commit at clone time (Nov 2026), so every labelled PR had at least 13 months for its defects to be found and fixed, except in `pydantic/pydantic-core`, whose last commit is from Jan 2026 (at least 4 months). |
-| Train | [`training/train.py`](training/train.py) | Per-repo chronological split 60/20/20, 24-config grid on validation AUC with early stopping, F1-optimal threshold on validation, one evaluation on test. |
+| Select features | [`training/experiments.py`](training/experiments.py) | v2 candidates added on top of the original 28 and kept only if dropping them lowered validation ROC-AUC (mean of 3 seeds). 3 of 13 kept. The test split is never loaded. |
+| Train | [`training/train.py`](training/train.py) | Per-repo chronological split 60/20/20. 60-configuration random search on validation AUC with early stopping. Two thresholds fixed on validation: max F1 ("balanced") and the highest catching 80% of validation defects ("high recall"). One evaluation on test. |
 
-### The 28 features
+### The 31 features
 
 | Group | Features |
 |---|---|
-| Size | lines added, lines deleted, files changed, deletion ratio, files added, files deleted |
+| Size | lines added, **source lines added**, lines deleted, files changed, deletion ratio, files added, files deleted |
 | Diffusion | directories changed, top-level subsystems changed, change entropy, largest file's share of churn |
 | Content | source files, test files, test churn ratio, source-changed-without-tests, config files, dependency files, languages |
 | Purpose | is a bug fix |
 | File history (last 100 changes per file) | prior changes (1y), recent changes (90d), distinct prior authors (1y), prior bug fixes (1y), days since last change |
 | Author experience | prior changes in repo, changes in last 90 days, changes in the touched top-level directories, share of files touched before, share of last year's changes to these files |
+| Repository context (last 100 changes) | **share that were bug fixes**, **how many landed in the last 30 days** |
+
+Bold = added in v2. Ten other candidates were tried and dropped on validation (`riskradar/features.py`,
+`DROPPED_ON_VALIDATION`); they are still computed so the experiment can be re-run.
 
 Review activity (comments, approvals, CI) is deliberately absent. Git history does not record it, and a
 pre-merge score that relied on it couldn't be computed before review.
@@ -222,8 +246,9 @@ python -m training.report                           # refresh the README results
 |---|---|---|
 | GET | `/api/metrics` | Every evaluation number, curves, importance, feature specs |
 | GET | `/api/repos` | Per-repository counts, defect rates and test results |
-| GET | `/api/prs?repo=&split=test&outcome=tp\|fp\|fn\|tn&band=&q=&sort=&limit=&offset=` | Scored PRs |
-| GET | `/api/prs/{owner}/{repo}/{number}` | One dataset PR: features, score, SHAP, top 3 factors |
+| GET | `/api/prs?repo=&split=test&outcome=tp\|fp\|fn\|tn&band=&factor=&q=&sort=&limit=&offset=` | Scored PRs with their top risk driver |
+| GET | `/api/prs/{owner}/{repo}/{number}` | One dataset PR: features, score, SHAP, % share of risk per feature, top 3 factors |
+| GET | `/api/drivers?population=flagged\|defects\|caught\|missed\|all&split=test&repo=` | Risk drivers across a population: average SHAP share, #1/top-3 counts, recommended fix |
 | POST | `/api/analyze` `{"url": "https://github.com/o/r/pull/1"}` | Live score for any public PR |
 | POST | `/api/score` `{"features": {...}}` | Score a raw feature vector |
 
@@ -242,9 +267,10 @@ Interactive docs at `/docs`.
 - The two speed-ups in SZZ (restricting blame to files a labelled PR touched, and bounding blame at the
   commit before the window) were checked to produce byte-identical labels to the unoptimised run.
 - Train/serve parity (`artifacts/parity.json`): four dataset PRs re-scored live through the GitHub API. All diff
-  and file-history features matched in all four. Author-experience counts matched in two and ran higher live in
+  and file-history features matched in all four. Author and repository counts matched in two and differed in
   two, because the API counts commits that reached the branch through occasional merges while training replays
-  first-parent history. The score moved by at most 0.005 probability (2 percentile points), with the same band.
+  first-parent history. The score moved by at most 0.001 probability (under 1 percentile point), with the same
+  band.
 
 ## Repository layout
 
