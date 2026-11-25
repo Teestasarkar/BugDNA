@@ -1,0 +1,45 @@
+{
+  "checked": 4,
+  "identical": 2,
+  "results": [
+    {
+      "pr": "tokio-rs/tokio#7412",
+      "differing": {
+        "author_prior_changes": {
+          "live": 247.0,
+          "mined": 203.0
+        },
+        "author_recent_changes_90d": {
+          "live": 19.0,
+          "mined": 12.0
+        }
+      }
+    },
+    {
+      "pr": "fastify/fastify#6011",
+      "differing": {
+        "author_prior_changes": {
+          "live": 143.0,
+          "mined": 81.0
+        },
+        "author_subsystem_changes": {
+          "live": 107.0,
+          "mined": 65.0
+        },
+        "author_file_familiarity": {
+          "live": 0.6666666666666666,
+          "mined": 0.3333333333333333
+        }
+      }
+    },
+    {
+      "pr": "psf/black#4551",
+      "differing": {}
+    },
+    {
+      "pr": "encode/httpx#3571",
+      "differing": {}
+    }
+  ],
+  "github_requests": 40
+}

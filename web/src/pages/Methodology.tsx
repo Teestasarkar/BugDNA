@@ -96,7 +96,7 @@ export default function Methodology() {
       <ul>
         <li>The score estimates the chance a later fix will touch this PR's lines. It is not a judgement of code quality, and a low score is not a guarantee.</li>
         <li>Review activity (comments, approvals, CI results) is not used. Git history doesn't record it, and the live API scores PRs before review finishes.</li>
-        <li>Live scoring reads at most the 10 largest pre-existing files' histories and identifies authors by GitHub login, whereas training used commit e-mail. Small differences from the offline features are possible.</li>
+        <li>Live scoring identifies authors by commit e-mail, as training does. But GitHub's API also counts commits that arrived through merges, so author-experience counts can run higher live. On re-scored dataset PRs this moved the score by at most 2 percentile points.</li>
       </ul>
     </div>
   );

@@ -241,7 +241,10 @@ Interactive docs at `/docs`.
   difference recorded in `metrics.json`).
 - The two speed-ups in SZZ (restricting blame to files a labelled PR touched, and bounding blame at the
   commit before the window) were checked to produce byte-identical labels to the unoptimised run.
-- Train/serve parity: see `artifacts/parity.json`.
+- Train/serve parity (`artifacts/parity.json`): four dataset PRs re-scored live through the GitHub API. All diff
+  and file-history features matched in all four. Author-experience counts matched in two and ran higher live in
+  two, because the API counts commits that reached the branch through occasional merges while training replays
+  first-parent history. The score moved by at most 0.005 probability (2 percentile points), with the same band.
 
 ## Repository layout
 
@@ -262,8 +265,9 @@ tests/       pytest suite
   score is not a guarantee.
 - Only squash-merge repositories are mined, so that a PR is one commit in both git and the API. Repositories
   that use merge commits are scored by the same model, but they are outside its training distribution.
-- Live scoring identifies the author by GitHub login, while training used commit e-mail. For people who commit
-  under several e-mails, live author-experience features can be slightly higher than offline ones.
+- Live scoring identifies the author by commit e-mail, as training does, but GitHub's commits API also counts
+  commits that arrived through merges, so live author-experience counts can run higher than offline ones in
+  repositories that occasionally merge branches (see Verification for the measured effect).
 
 ## Licence
 
