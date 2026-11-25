@@ -2,9 +2,24 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip,
   XAxis, YAxis, LabelList,
 } from "recharts";
-import type { FeatureSpec, Metrics } from "../lib/api";
+import type { Driver, FeatureSpec, Metrics } from "../lib/api";
 import { num, pct } from "../lib/format";
 import { useChartColors } from "../lib/theme";
+
+/** Bar-end label drawn as plain SVG text: recharts' default wraps it to the bar's width on short bars. */
+function endLabel(fill: string, format: (v: number, i: number) => string) {
+  return (props: { x?: number | string; y?: number | string; width?: number | string; height?: number | string; value?: unknown; index?: number }) => {
+    const x = Number(props.x ?? 0), w = Number(props.width ?? 0), y = Number(props.y ?? 0), h = Number(props.height ?? 0);
+    const v = Number(props.value ?? 0);
+    const left = Math.min(x, x + w), right = Math.max(x, x + w);
+    return (
+      <text x={v < 0 ? left - 6 : right + 6} y={y + h / 2} dominantBaseline="central" textAnchor={v < 0 ? "end" : "start"}
+        fill={fill} fontSize={12} style={{ fontVariantNumeric: "tabular-nums" }}>
+        {format(v, props.index ?? 0)}
+      </text>
+    );
+  };
+}
 
 const axisProps = (c: ReturnType<typeof useChartColors>) => ({
   stroke: c["--axis"],
@@ -33,6 +48,7 @@ export function RocChart({ metrics }: { metrics: Metrics }) {
   const size = onGrid(metrics.curves.roc_size_only, xs);
   const data = xs.map((x, i) => ({ fpr: x, model: model[i], size: size[i] }));
   const op = metrics.curves.operating_point;
+  const hr = metrics.curves.operating_point_high_recall;
   return (
     <div className="chart">
       <ResponsiveContainer width="100%" height={280}>
@@ -54,7 +70,11 @@ export function RocChart({ metrics }: { metrics: Metrics }) {
           <Line dataKey="model" stroke={c["--series-1"]} strokeWidth={2} dot={false} isAnimationActive={false} name="XGBoost"
             activeDot={{ r: 5, stroke: c["--surface"], strokeWidth: 2 }} />
           <ReferenceDot x={op.fpr} y={op.recall} r={5} fill={c["--series-1"]} stroke={c["--surface"]} strokeWidth={2}
-            label={{ value: `Threshold: ${pct(op.recall)} recall`, position: "right", fill: c["--ink-2"], fontSize: 12 }} />
+            label={{ value: `Balanced: ${pct(op.recall)} caught`, position: "right", fill: c["--ink-2"], fontSize: 12 }} />
+          {hr && (
+            <ReferenceDot x={hr.fpr} y={hr.recall} r={5} fill={c["--surface"]} stroke={c["--series-1"]} strokeWidth={2}
+              label={{ value: `High recall: ${pct(hr.recall)} caught`, position: "right", fill: c["--ink-2"], fontSize: 12 }} />
+          )}
         </LineChart>
       </ResponsiveContainer>
       <div className="legend">
@@ -75,6 +95,7 @@ export function PrCurveChart({ metrics }: { metrics: Metrics }) {
   const c = useChartColors();
   const data = metrics.curves.pr.map(([recall, precision]) => ({ recall, precision }));
   const op = metrics.curves.operating_point;
+  const hr = metrics.curves.operating_point_high_recall;
   return (
     <div className="chart">
       <ResponsiveContainer width="100%" height={280}>
@@ -95,7 +116,11 @@ export function PrCurveChart({ metrics }: { metrics: Metrics }) {
           <Line dataKey="precision" stroke={c["--series-1"]} strokeWidth={2} dot={false} isAnimationActive={false}
             activeDot={{ r: 5, stroke: c["--surface"], strokeWidth: 2 }} />
           <ReferenceDot x={op.recall} y={op.precision} r={5} fill={c["--series-1"]} stroke={c["--surface"]} strokeWidth={2}
-            label={{ value: `Threshold: ${pct(op.precision)} precision`, position: "top", fill: c["--ink-2"], fontSize: 12 }} />
+            label={{ value: `Balanced: ${pct(op.precision)} precision`, position: "top", fill: c["--ink-2"], fontSize: 12 }} />
+          {hr && (
+            <ReferenceDot x={hr.recall} y={hr.precision} r={5} fill={c["--surface"]} stroke={c["--series-1"]} strokeWidth={2}
+              label={{ value: `High recall: ${pct(hr.precision)}`, position: "bottom", fill: c["--ink-2"], fontSize: 12 }} />
+          )}
         </LineChart>
       </ResponsiveContainer>
       <details className="table-view">
@@ -128,7 +153,7 @@ export function ImportanceChart({ metrics, top = 12 }: { metrics: Metrics; top?:
               </div>
             ) : null} />
           <Bar dataKey="mean_abs_shap" fill={c["--series-1"]} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
-            <LabelList dataKey="mean_abs_shap" position="right" formatter={(v: number) => v.toFixed(3)} fill={c["--ink-2"]} fontSize={12} />
+            <LabelList dataKey="mean_abs_shap" content={endLabel(c["--ink-2"], (v) => v.toFixed(3))} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -136,9 +161,10 @@ export function ImportanceChart({ metrics, top = 12 }: { metrics: Metrics; top?:
   );
 }
 
-export function ShapChart({ contributions, values, specs, top = 12 }: {
+export function ShapChart({ contributions, values, specs, shares = {}, top = 12 }: {
   contributions: Record<string, number>;
   values: Record<string, number | null>;
+  shares?: Record<string, number>;
   specs: FeatureSpec[];
   top?: number;
 }) {
@@ -148,13 +174,16 @@ export function ShapChart({ contributions, values, specs, top = 12 }: {
     .filter(([, v]) => Math.abs(v) > 1e-6)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .slice(0, top)
-    .map(([name, v]) => ({ name, v, label: `${byName[name]?.label ?? name} = ${num(values[name])}` }));
+    .map(([name, v]) => ({
+      name, v, label: `${byName[name]?.label ?? name} = ${num(values[name])}`,
+      tag: v > 0 && shares[name] ? `+${v.toFixed(2)} · ${shares[name].toFixed(0)}%` : v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2),
+    }));
   if (!data.length) return <p className="muted small">No feature moved this score away from the baseline.</p>;
   const rowH = 30;
   return (
     <div className="chart">
       <ResponsiveContainer width="100%" height={data.length * rowH + 24}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 52, bottom: 0, left: 0 }} barCategoryGap={8}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 96, bottom: 0, left: 0 }} barCategoryGap={8}>
           <CartesianGrid stroke={c["--grid"]} horizontal={false} />
           <XAxis type="number" {...axisProps(c)} tickFormatter={(v) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1))} />
           <YAxis type="category" dataKey="label" width={260} {...axisProps(c)} tick={{ fill: c["--ink-2"], fontSize: 12 }} />
@@ -165,19 +194,87 @@ export function ShapChart({ contributions, values, specs, top = 12 }: {
                 <div className="t">{byName[payload[0].payload.name]?.label}</div>
                 <div className="r">Value {num(values[payload[0].payload.name])}</div>
                 <div className="r">{payload[0].payload.v > 0 ? "Raises" : "Lowers"} risk by {Math.abs(payload[0].payload.v).toFixed(3)} log-odds</div>
+                {payload[0].payload.v > 0 && shares[payload[0].payload.name] !== undefined && (
+                  <div className="r">{shares[payload[0].payload.name].toFixed(1)}% of this PR's risk</div>
+                )}
               </div>
             ) : null} />
           <Bar dataKey="v" radius={4} maxBarSize={18} isAnimationActive={false}>
             {data.map((d) => <Cell key={d.name} fill={d.v > 0 ? c["--risk-up"] : c["--risk-down"]} />)}
-            <LabelList dataKey="v" position="right" formatter={(v: number) => (v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2))} fill={c["--ink-2"]} fontSize={12} />
+            <LabelList dataKey="v" content={endLabel(c["--ink-2"], (_, i) => data[i]?.tag ?? "")} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
       <div className="legend">
         <span><span className="key sq" style={{ background: c["--risk-up"] }} />Raises risk</span>
         <span><span className="key sq" style={{ background: c["--risk-down"] }} />Lowers risk</span>
-        <span className="muted">SHAP values in log-odds; they sum with the baseline to the model's output.</span>
+        <span className="muted">SHAP values in log-odds (they sum with the baseline to the model's output); % = share of this PR's risk.</span>
       </div>
+    </div>
+  );
+}
+
+const SLOTS = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"] as const;
+
+/** One PR's risk as a whole (100%), split into its largest drivers plus "Other". Tall segmented bar. */
+export function RiskComposition({ shares, specs, top = 5 }: {
+  shares: Record<string, number>;
+  specs: FeatureSpec[];
+  top?: number;
+}) {
+  const c = useChartColors();
+  const byName = Object.fromEntries(specs.map((s) => [s.name, s]));
+  const entries = Object.entries(shares).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return <p className="muted small">No feature raises this PR's risk above the baseline.</p>;
+  const head = entries.slice(0, top);
+  const rest = entries.slice(top).reduce((s, [, v]) => s + v, 0);
+  const parts = head.map(([name, v], i) => ({ name, label: byName[name]?.label ?? name, v, color: c[SLOTS[i]], dark: i === 3, ink: false }));
+  if (rest >= 0.5) parts.push({ name: "other", label: `Other (${entries.length - top} features)`, v: rest, color: c["--axis"], dark: false, ink: true });
+  return (
+    <div>
+      <div className="composition" role="img"
+        aria-label={`Risk composition: ${parts.map((p) => `${p.label} ${p.v.toFixed(0)}%`).join(", ")}`}>
+        {parts.map((p) => (
+          <div key={p.name} className={`seg${p.dark ? " dark-text" : ""}${p.ink ? " ink-text" : ""}`} style={{ flex: `${p.v} 1 0`, background: p.color }}
+            title={`${p.label}: ${p.v.toFixed(1)}% of this PR's risk`}>
+            {p.v >= 9 ? `${Math.round(p.v)}%` : ""}
+          </div>
+        ))}
+      </div>
+      <div className="composition-legend">
+        {parts.map((p) => (
+          <span key={p.name}><span className="sw" style={{ background: p.color }} />{p.label} <b className="share-pill">{p.v.toFixed(0)}%</b></span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Average share of risk each feature carries across a population of PRs. Single series. */
+export function DriversChart({ drivers, top = 12 }: { drivers: Driver[]; top?: number }) {
+  const c = useChartColors();
+  const data = drivers.slice(0, top).map((d) => ({ ...d, v: d.mean_share }));
+  const rowH = 30;
+  return (
+    <div className="chart">
+      <ResponsiveContainer width="100%" height={data.length * rowH + 24}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 52, bottom: 0, left: 0 }} barCategoryGap={8}>
+          <CartesianGrid stroke={c["--grid"]} horizontal={false} />
+          <XAxis type="number" {...axisProps(c)} tickFormatter={(v) => `${v}%`} />
+          <YAxis type="category" dataKey="label" width={210} {...axisProps(c)} tick={{ fill: c["--ink-2"], fontSize: 12.5 }} />
+          <Tooltip cursor={{ fill: c["--wash-1"] }} content={({ active, payload }) =>
+            active && payload?.length ? (
+              <div className="tooltip">
+                <div className="t">{payload[0].payload.label}</div>
+                <div className="r">{Number(payload[0].payload.mean_share).toFixed(1)}% of these PRs' risk on average</div>
+                <div className="r">#1 driver for {payload[0].payload.prs_top1} PRs, top 3 for {payload[0].payload.prs_top3}</div>
+              </div>
+            ) : null} />
+          <Bar dataKey="v" fill={c["--series-1"]} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
+            <LabelList dataKey="v" content={endLabel(c["--ink-2"], (v) => `${v.toFixed(1)}%`)} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

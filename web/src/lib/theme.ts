@@ -35,7 +35,7 @@ export function initTheme() {
   if (t !== "system") document.documentElement.setAttribute("data-theme", t);
 }
 
-const TOKENS = ["--series-1", "--series-2", "--risk-up", "--risk-down", "--grid", "--axis", "--muted", "--ink", "--ink-2",
+const TOKENS = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--risk-up", "--risk-down", "--grid", "--axis", "--muted", "--ink", "--ink-2",
   "--surface", "--critical", "--wash-1"] as const;
 export type ChartColors = Record<(typeof TOKENS)[number], string>;
 

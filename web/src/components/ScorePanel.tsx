@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { FeatureSpec, Score } from "../lib/api";
 import { bandLabel, num, pct, score as scoreOf } from "../lib/format";
-import { ShapChart } from "./charts";
+import { RiskComposition, ShapChart } from "./charts";
 import { BandBadge, CheckIcon } from "./ui";
 
 export function ScoreSummary({ score, threshold }: { score: Score; threshold: number }) {
@@ -21,8 +21,10 @@ export function ScoreSummary({ score, threshold }: { score: Score; threshold: nu
         <dd>Riskier than {scoreOf(score.percentile)}% of validation PRs</dd>
         <dt>Model probability</dt>
         <dd>{pct(score.probability, 1)} <span className="muted">(flag threshold {pct(threshold, 1)})</span></dd>
-        <dt>Decision</dt>
+        <dt>Balanced mode</dt>
         <dd>{score.flagged ? "Flagged for extra review" : "Not flagged"}</dd>
+        <dt>High-recall mode</dt>
+        <dd>{score.high_recall_flagged ? "Flagged" : "Not flagged"} <span className="muted">(catches 80% of defects on validation)</span></dd>
       </dl>
     </div>
   );
@@ -42,7 +44,7 @@ export function Factors({ score }: { score: Score }) {
             <div>
               <div className="finding">{f.finding}</div>
               <div className="fix"><CheckIcon /><span>{f.remediation}</span></div>
-              <div className="meta">{f.label} · +{f.shap.toFixed(3)} log-odds</div>
+              <div className="meta"><b className="share-pill">{f.share.toFixed(0)}%</b> of this PR's risk · {f.label} · +{f.shap.toFixed(3)} log-odds</div>
             </div>
           </div>
         ))
@@ -51,17 +53,18 @@ export function Factors({ score }: { score: Score }) {
   );
 }
 
-export function FeatureTable({ features, contributions, specs }: {
+export function FeatureTable({ features, contributions, shares, specs }: {
   features: Record<string, number | null>;
   contributions: Record<string, number>;
+  shares: Record<string, number>;
   specs: FeatureSpec[];
 }) {
   return (
     <details className="card">
-      <summary style={{ cursor: "pointer" }}><h3 style={{ display: "inline" }}>All 28 feature values</h3></summary>
+      <summary style={{ cursor: "pointer" }}><h3 style={{ display: "inline" }}>All {specs.length} feature values</h3></summary>
       <div className="table-wrap" style={{ marginTop: 12 }}>
         <table>
-          <thead><tr><th>Feature</th><th>Group</th><th className="num">Value</th><th className="num">SHAP</th></tr></thead>
+          <thead><tr><th>Feature</th><th>Group</th><th className="num">Value</th><th className="num">SHAP</th><th className="num">Share of risk</th></tr></thead>
           <tbody>
             {specs.map((s) => (
               <tr key={s.name}>
@@ -69,6 +72,7 @@ export function FeatureTable({ features, contributions, specs }: {
                 <td className="muted">{s.group}</td>
                 <td className="num">{num(features[s.name])}</td>
                 <td className="num">{(contributions[s.name] ?? 0) > 0 ? "+" : ""}{(contributions[s.name] ?? 0).toFixed(3)}</td>
+                <td className="num">{shares[s.name] ? `${shares[s.name].toFixed(1)}%` : "–"}</td>
               </tr>
             ))}
           </tbody>
@@ -95,11 +99,16 @@ export function ScorePanel({ score, features, specs, threshold, aside }: {
         <Factors score={score} />
       </div>
       <div className="card">
+        <div className="card-head"><h3>Where this PR's risk comes from</h3></div>
+        <p className="card-sub">Each feature's share of everything pushing this PR's risk up (positive TreeSHAP values, summing to 100%).</p>
+        <RiskComposition shares={score.shares} specs={specs} />
+      </div>
+      <div className="card">
         <div className="card-head"><h3>Why this score</h3></div>
         <p className="card-sub">Each bar is one feature's exact TreeSHAP contribution for this PR (largest 12 shown).</p>
-        <ShapChart contributions={score.contributions} values={features} specs={specs} />
+        <ShapChart contributions={score.contributions} values={features} specs={specs} shares={score.shares} />
       </div>
-      <FeatureTable features={features} contributions={score.contributions} specs={specs} />
+      <FeatureTable features={features} contributions={score.contributions} shares={score.shares} specs={specs} />
     </div>
   );
 }

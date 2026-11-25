@@ -56,7 +56,7 @@ export default function Analyze() {
         <h1>Analyze a pull request</h1>
         <p>
           Paste any public GitHub PR. The server reads its diff and the base branch's history through the GitHub API,
-          computes the same 28 features with the same code used in training, and explains the score. Open PRs are
+          computes the same features with the same code used in training, and explains the score. Open PRs are
           scored as of now; merged PRs as of the moment before they merged.
         </p>
       </div>
@@ -76,7 +76,7 @@ export default function Analyze() {
       </form>
 
       <div style={{ marginTop: 16 }} className="stack">
-        {busy && <div className="callout" role="status">Reading the PR and up to 10 files' history from GitHub, about 20 API requests…</div>}
+        {busy && <div className="callout" role="status">Reading the PR and up to 10 files' history from GitHub, about 25 API requests…</div>}
         {error && <ErrorNote message={error} />}
         {result && metrics.data && (
           <>

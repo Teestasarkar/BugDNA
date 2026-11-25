@@ -3,11 +3,12 @@ import { api } from "../lib/api";
 import { compact, pct } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import { ImportanceChart, PrCurveChart, RocChart } from "../components/charts";
-import { ErrorNote, Loading, StatTile } from "../components/ui";
+import { CheckIcon, ErrorNote, Loading, StatTile } from "../components/ui";
 
 export default function Overview() {
   const m = useAsync(api.metrics, []);
   const repos = useAsync(api.repos, []);
+  const drivers = useAsync(() => api.drivers("flagged"), []);
   const navigate = useNavigate();
 
   if (m.error) return <ErrorNote message={m.error} />;
@@ -48,9 +49,9 @@ export default function Overview() {
         <div className="tiles">
           <StatTile label="ROC-AUC (held-out test)" value={t.roc_auc.toFixed(3)}
             note={`Lines-changed baseline: ${d.baselines.size_only_roc_auc.toFixed(3)}`} />
-          <StatTile label="Recall at threshold" value={pct(t.recall)}
+          <StatTile label="Defect-causing PRs caught" value={pct(t.recall)}
             note={`${Math.round(t.recall * t.positives)} of ${t.positives} defect-inducing PRs caught`} />
-          <StatTile label="Precision at threshold" value={pct(t.precision)}
+          <StatTile label="Precision (balanced mode)" value={pct(t.precision)}
             note={`Base rate ${pct(t.base_rate, 1)}; flags ${pct(t.flagged_share)} of PRs`} />
           <StatTile label="PR-AUC" value={t.pr_auc.toFixed(3)} note={`Random would score ${t.base_rate.toFixed(3)}`} />
           <StatTile label="Pull requests" value={compact(d.dataset.prs)} note={`${d.dataset.split_sizes.test.toLocaleString()} in the test split`} />
@@ -69,7 +70,7 @@ export default function Overview() {
         </div>
         <div className="card">
           <div className="card-head"><h2>Precision vs recall</h2></div>
-          <p className="card-sub">The dot is the operating threshold, chosen on the validation split to maximise F1.</p>
+          <p className="card-sub">Dots are the two operating thresholds, both fixed on the validation split: balanced (max F1, filled) and high recall (hollow).</p>
           <PrCurveChart metrics={d} />
         </div>
       </section>
@@ -89,8 +90,20 @@ export default function Overview() {
               <tbody>
                 <tr><td>Random</td><td className="num">0.500</td><td className="num">{t.base_rate.toFixed(3)}</td></tr>
                 <tr><td>Lines changed (bigger = riskier)</td><td className="num">{d.baselines.size_only_roc_auc.toFixed(3)}</td><td className="num">{d.baselines.size_only_pr_auc.toFixed(3)}</td></tr>
-                <tr><td>Logistic regression, 28 features</td><td className="num">{d.baselines.logistic_regression_roc_auc.toFixed(3)}</td><td className="num">{d.baselines.logistic_regression_pr_auc.toFixed(3)}</td></tr>
-                <tr><td><b>XGBoost, 28 features</b></td><td className="num"><b>{t.roc_auc.toFixed(3)}</b></td><td className="num"><b>{t.pr_auc.toFixed(3)}</b></td></tr>
+                <tr><td>Logistic regression, same {d.dataset.features} features</td><td className="num">{d.baselines.logistic_regression_roc_auc.toFixed(3)}</td><td className="num">{d.baselines.logistic_regression_pr_auc.toFixed(3)}</td></tr>
+                <tr><td><b>XGBoost, {d.dataset.features} features</b></td><td className="num"><b>{t.roc_auc.toFixed(3)}</b></td><td className="num"><b>{t.pr_auc.toFixed(3)}</b></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 style={{ margin: "18px 0 8px" }}>Two operating modes</h3>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Mode (threshold set on validation)</th><th className="num">Caught</th><th className="num">Precision</th><th className="num">PRs flagged</th></tr></thead>
+              <tbody>
+                <tr><td>Balanced (max F1)</td><td className="num">{pct(t.recall)}</td><td className="num">{pct(t.precision)}</td><td className="num">{pct(t.flagged_share)}</td></tr>
+                {d.high_recall && (
+                  <tr><td>High recall (≥{pct(d.high_recall.target_recall)} on validation)</td><td className="num">{pct(d.high_recall.test.recall)}</td><td className="num">{pct(d.high_recall.test.precision)}</td><td className="num">{pct(d.high_recall.test.flagged_share)}</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -101,6 +114,31 @@ export default function Overview() {
             ({(t.precision_at_top10pct / t.base_rate).toFixed(1)}× the base rate).
           </p>
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h2>What drives risk in flagged PRs</h2><Link to="/drivers" className="small">All drivers and populations →</Link></div>
+        <p className="card-sub">
+          Average share of each flagged test PR's risk (from SHAP), and the fix to apply when that driver is present.
+        </p>
+        {drivers.error && <ErrorNote message={drivers.error} />}
+        {drivers.data ? (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Driver</th><th className="num">Avg share of risk</th><th className="num">#1 driver in</th><th>Recommended fix</th></tr></thead>
+              <tbody>
+                {drivers.data.drivers.slice(0, 6).map((r) => (
+                  <tr key={r.feature}>
+                    <td><b>{r.label}</b></td>
+                    <td className="num"><span className="share-pill">{r.mean_share.toFixed(1)}%</span></td>
+                    <td className="num">{r.prs_top1 > 0 ? <Link to={`/prs?factor=${r.feature}`}>{r.prs_top1} {r.prs_top1 === 1 ? "PR" : "PRs"}</Link> : "–"}</td>
+                    <td><div className="rec" style={{ display: "flex", gap: 8 }}><span style={{ color: "var(--good-ink)", flex: "none", marginTop: 2 }}><CheckIcon /></span>{r.recommendation}</div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : !drivers.error && <Loading />}
       </section>
 
       <section className="card">

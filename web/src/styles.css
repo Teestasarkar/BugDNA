@@ -14,6 +14,9 @@
   --border: rgba(11, 11, 11, 0.1);
   --series-1: #2a78d6;
   --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
   --risk-up: #e34948;      /* diverging: pushes risk up */
   --risk-down: #2a78d6;    /* diverging: pushes risk down */
   --wash-1: rgba(42, 120, 214, 0.1);
@@ -43,6 +46,9 @@
     --border: rgba(255, 255, 255, 0.1);
     --series-1: #3987e5;
     --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
     --risk-up: #e66767;
     --risk-down: #3987e5;
     --wash-1: rgba(57, 135, 229, 0.14);
@@ -66,6 +72,9 @@
   --border: rgba(255, 255, 255, 0.1);
   --series-1: #3987e5;
   --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
   --risk-up: #e66767;
   --risk-down: #3987e5;
   --wash-1: rgba(57, 135, 229, 0.14);
@@ -291,3 +300,16 @@ details.table-view table { margin-top: 8px; font-size: 13px; }
 
 /* Long file paths must wrap rather than widen the page on phones. */
 code { overflow-wrap: anywhere; }
+
+/* Risk composition: one whole (100% of this PR's risk) split into its drivers. Tall segmented bar. */
+.composition { display: flex; gap: 2px; height: 28px; margin: 10px 0 8px; }
+.composition .seg { min-width: 0; border-radius: 4px; display: flex; align-items: center; padding: 0 8px;
+  font-size: 12.5px; font-weight: 600; color: #fff; white-space: nowrap; overflow: visible; }
+.composition .seg.dark-text { color: #0b0b0b; }
+.composition .seg.ink-text { color: var(--ink); }
+.composition-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+.composition-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.share-pill { display: inline-block; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--ink); }
+.driver-cell { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+.driver-cell .sub { color: var(--muted); font-size: 12.5px; }
+.rec { color: var(--ink-2); font-size: 13.5px; min-width: 260px; }

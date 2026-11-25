@@ -9,6 +9,7 @@ const GROUPS: Record<string, string> = {
   content: "What kind of files",
   purpose: "Purpose",
   history: "History of the touched files",
+  repository: "Repository context",
   experience: "Author experience",
 };
 
@@ -58,7 +59,7 @@ export default function Methodology() {
 
       <h2>3. Features</h2>
       <p>
-        28 features, all computable at merge time from the diff and the base branch's history before the PR. One Python
+        {d.dataset.features} features, all computable at merge time from the diff and the base branch's history before the PR. One Python
         function computes them for both training (from a git clone) and live scoring (from the GitHub API), which keeps
         training and serving consistent.
       </p>
@@ -72,13 +73,15 @@ export default function Methodology() {
       <h2>4. Evaluation</h2>
       <p>
         Each repository is split by merge date: oldest 60% train, next 20% validation, newest 20% test. The model is
-        always tested on a repository's future, never its past. Hyperparameters (a grid of depth, minimum child weight
-        and L2), early stopping and the decision threshold (maximum F1) were all chosen on validation. The test split
+        always tested on a repository's future, never its past. Hyperparameters (a random search over depth, learning rate,
+        regularisation and sampling), early stopping, which features to keep, and both decision thresholds were all
+        chosen on validation. The test split
         was scored once.
       </p>
       <ul>
         <li>Test ROC-AUC <b>{d.test.roc_auc.toFixed(3)}</b>, PR-AUC <b>{d.test.pr_auc.toFixed(3)}</b> (base rate {d.test.base_rate.toFixed(3)}).</li>
-        <li>At the validation-chosen threshold: precision <b>{pct(d.test.precision, 1)}</b>, recall <b>{pct(d.test.recall, 1)}</b>, flagging {pct(d.test.flagged_share)} of PRs.</li>
+        <li>Balanced mode (max F1 on validation): precision <b>{pct(d.test.precision, 1)}</b>, recall <b>{pct(d.test.recall, 1)}</b>, flagging {pct(d.test.flagged_share)} of PRs.</li>
+        {d.high_recall && <li>High-recall mode (threshold set to catch {pct(d.high_recall.target_recall)} of validation defects): precision <b>{pct(d.high_recall.test.precision, 1)}</b>, recall <b>{pct(d.high_recall.test.recall, 1)}</b>, flagging {pct(d.high_recall.test.flagged_share)} of PRs.</li>}
         <li>Lines-changed baseline ROC-AUC {d.baselines.size_only_roc_auc.toFixed(3)}; logistic regression {d.baselines.logistic_regression_roc_auc.toFixed(3)}.</li>
         <li>Leave-repositories-out (5 folds, grouped by repo): ROC-AUC {d.cross_project.roc_auc_mean.toFixed(3)} ± {d.cross_project.roc_auc_std.toFixed(3)}, which is the relevant number when scoring a repository outside the dataset.</li>
       </ul>

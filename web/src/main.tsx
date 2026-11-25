@@ -7,6 +7,7 @@ import Explorer from "./pages/Explorer";
 import PrDetail from "./pages/PrDetail";
 import Analyze from "./pages/Analyze";
 import Methodology from "./pages/Methodology";
+import Drivers from "./pages/Drivers";
 import { initTheme } from "./lib/theme";
 import "./styles.css";
 
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
       { index: true, element: <Overview /> },
       { path: "prs", element: <Explorer /> },
       { path: "prs/:owner/:name/:number", element: <PrDetail /> },
+      { path: "drivers", element: <Drivers /> },
       { path: "analyze", element: <Analyze /> },
       { path: "methodology", element: <Methodology /> },
       { path: "*", element: <p>Page not found.</p> },

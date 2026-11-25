@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from riskradar import paths
 from riskradar.dataset import read_prs
+from riskradar.explain import recommendation
 from riskradar.features import FEATURE_NAMES, SPEC_BY_NAME
 from riskradar.scoring import RiskModel, artifacts_dir
 
@@ -55,12 +57,22 @@ def repos_meta() -> list[dict]:
 
 @lru_cache(maxsize=1)
 def predictions() -> pd.DataFrame:
-    df = read_prs(artifacts_dir() / "predictions.csv.gz")
+    df = read_prs(artifacts_dir() / "predictions.csv.gz").reset_index(drop=True)
     m = model()
     df["percentile"] = [round(m.percentile(p), 1) for p in df["prob"]]
     df["flagged"] = df["prob"] >= m.threshold
+    df["high_recall_flagged"] = df["prob"] >= m.high_recall_threshold
     df["band"] = [m.band(p, q) for p, q in zip(df["prob"], df["percentile"])]
     df["outcome"] = [("tp" if y else "fp") if f else ("fn" if y else "tn") for f, y in zip(df["flagged"], df["label"])]
+    # Risk shares per PR: positive SHAP of features with a known value, as % of the positive total.
+    x = df[list(FEATURE_NAMES)].to_numpy(dtype=np.float64)
+    pos = np.where(np.isnan(x), 0.0, np.clip(m.contributions(x).astype(np.float64), 0.0, None))
+    total = pos.sum(axis=1, keepdims=True)
+    shares = np.divide(100.0 * pos, total, out=np.zeros_like(pos), where=total > 0)
+    top = shares.argmax(axis=1)
+    df["top_factor"] = [FEATURE_NAMES[j] if total[i, 0] > 0 else "" for i, j in enumerate(top)]
+    df["top_share"] = np.round(shares[np.arange(len(df)), top], 1)
+    df.attrs["shares"] = shares
     return df
 
 
@@ -72,7 +84,8 @@ def _clean(v):
 
 def _row_summary(r: pd.Series) -> dict:
     return {k: _clean(r[k]) for k in ("repo", "number", "title", "merged_at", "split", "label", "prob",
-                                      "percentile", "band", "flagged", "outcome", "fixed_by")}
+                                      "percentile", "band", "flagged", "high_recall_flagged", "outcome",
+                                      "fixed_by", "top_factor", "top_share")}
 
 
 def _context(top_files: str) -> dict:
@@ -126,6 +139,7 @@ def list_prs(
     split: Literal["train", "val", "test", "all"] = "test",
     outcome: Literal["tp", "fp", "fn", "tn", "all"] = "all",
     band: Literal["HIGH", "MEDIUM", "LOW", "all"] = "all",
+    factor: str | None = Query(None, max_length=60, description="only PRs whose #1 risk driver is this feature"),
     q: str | None = Query(None, max_length=200),
     sort: Literal["prob", "merged_at", "number"] = "prob",
     order: Literal["asc", "desc"] = "desc",
@@ -141,11 +155,59 @@ def list_prs(
         df = df[df.outcome == outcome]
     if band != "all":
         df = df[df.band == band]
+    if factor:
+        df = df[df.top_factor == factor]
     if q:
         df = df[df.title.str.contains(q, case=False, regex=False)]
     df = df.sort_values(sort, ascending=order == "asc", kind="stable")
     page = df.iloc[offset:offset + limit]
     return {"total": int(len(df)), "items": [_row_summary(r) for _, r in page.iterrows()]}
+
+
+Population = Literal["flagged", "defects", "caught", "missed", "all"]
+_POPULATIONS = {
+    "flagged": lambda d: d.flagged,
+    "defects": lambda d: d.label == 1,
+    "caught": lambda d: d.flagged & (d.label == 1),
+    "missed": lambda d: ~d.flagged & (d.label == 1),
+    "all": lambda d: pd.Series(True, index=d.index),
+}
+
+
+@app.get("/api/drivers")
+def drivers(population: Population = "flagged", split: Literal["train", "val", "test", "all"] = "test",
+            repo: str | None = None) -> dict:
+    """Which features drive risk across a population of PRs, by SHAP share, with the recommended fix."""
+    df = predictions()
+    mask = _POPULATIONS[population](df)
+    if split != "all":
+        mask &= df.split == split
+    if repo:
+        mask &= df.repo == repo
+    idx = np.flatnonzero(mask.to_numpy())
+    shares = df.attrs["shares"][idx]
+    ranks = np.argsort(-shares, axis=1)[:, :3] if len(idx) else np.empty((0, 3), dtype=int)
+    medians = model().medians
+    sub = df.iloc[idx]
+    items = []
+    for j, name in enumerate(FEATURE_NAMES):
+        col = shares[:, j]
+        raising = int((col > 0).sum())
+        if raising == 0:
+            continue
+        spec = SPEC_BY_NAME[name]
+        items.append({
+            "feature": name, "label": spec.label, "group": spec.group, "description": spec.description,
+            "mean_share": round(float(col.mean()), 2),
+            "prs_top1": int((sub.top_factor == name).sum()),
+            "prs_top3": int(((ranks == j) & (np.take_along_axis(shares, ranks, axis=1) > 0)).any(axis=1).sum()),
+            "prs_raising": raising,
+            "median_value": _clean(float(sub[name].median())), "dataset_median": medians.get(name),
+            "recommendation": recommendation(name),
+        })
+    items.sort(key=lambda r: -r["mean_share"])
+    return {"population": population, "split": split, "repo": repo, "prs": int(len(idx)),
+            "defect_rate": round(float(sub.label.mean()), 4) if len(idx) else None, "drivers": items}
 
 
 @app.get("/api/prs/{owner}/{name}/{number}")

@@ -54,7 +54,7 @@ def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
 def test_health_and_metrics(client: TestClient) -> None:
     assert client.get("/api/health").json()["status"] == "ok"
     m = client.get("/api/metrics").json()
-    assert m["dataset"]["prs"] == 720 and m["dataset"]["features"] == 28
+    assert m["dataset"]["prs"] == 720 and m["dataset"]["features"] == len(FEATURE_NAMES)
     assert 0.5 < m["test"]["roc_auc"] <= 1.0          # the synthetic label depends on size
     assert m["shap_max_abs_diff_vs_shap_package"] in (None,) or m["shap_max_abs_diff_vs_shap_package"] < 1e-4
 
@@ -67,7 +67,7 @@ def test_list_and_detail(client: TestClient) -> None:
     first = page["items"][0]
     detail = client.get(f"/api/prs/{first['repo']}/{first['number']}").json()
     score = detail["score"]
-    assert len(score["contributions"]) == 28
+    assert len(score["contributions"]) == len(FEATURE_NAMES)
     assert len(score["factors"]) <= 3 and all(f["shap"] > 0 for f in score["factors"])
     # SHAP contributions plus the base value reproduce the model's log-odds.
     logit = math.log(score["probability"] / (1 - score["probability"]))
@@ -83,3 +83,27 @@ def test_errors(client: TestClient) -> None:
 def test_partial_features_never_explain_unknown_values(client: TestClient) -> None:
     s = client.post("/api/score", json={"features": {"lines_added": 5000}}).json()
     assert {f["feature"] for f in s["factors"]} <= {"lines_added"}
+
+
+def test_risk_shares_sum_to_100_and_match_factors(client: TestClient) -> None:
+    first = client.get("/api/prs", params={"limit": 1}).json()["items"][0]
+    score = client.get(f"/api/prs/{first['repo']}/{first['number']}").json()["score"]
+    assert sum(score["shares"].values()) == pytest.approx(100, abs=0.5)
+    for f in score["factors"]:
+        assert f["share"] == pytest.approx(score["shares"][f["feature"]], abs=0.1)
+    assert first["top_factor"] in score["shares"]
+
+
+def test_drivers_aggregate_and_filter(client: TestClient) -> None:
+    for population in ("flagged", "defects", "caught", "missed", "all"):
+        d = client.get("/api/drivers", params={"population": population}).json()
+        shares = [r["mean_share"] for r in d["drivers"]]
+        assert shares == sorted(shares, reverse=True)
+        if d["prs"]:
+            assert sum(shares) == pytest.approx(100, abs=1.0)        # mean of per-PR shares that each sum to 100
+            assert sum(r["prs_top1"] for r in d["drivers"]) <= d["prs"]
+            assert all(r["recommendation"] for r in d["drivers"])
+    top = client.get("/api/drivers", params={"population": "all"}).json()["drivers"][0]
+    listed = client.get("/api/prs", params={"factor": top["feature"], "limit": 200}).json()
+    assert listed["total"] == top["prs_top1"]
+    assert all(p["top_factor"] == top["feature"] for p in listed["items"])

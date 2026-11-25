@@ -43,6 +43,7 @@ export interface Metrics {
   threshold: number;
   test: BinaryMetrics;
   validation: BinaryMetrics;
+  high_recall?: { target_recall: number; threshold: number; test: BinaryMetrics; validation: BinaryMetrics };
   baselines: {
     size_only_roc_auc: number;
     size_only_pr_auc: number;
@@ -57,6 +58,7 @@ export interface Metrics {
     pr: [number, number][];
     roc_size_only: [number, number][];
     operating_point: { fpr: number; recall: number; precision: number };
+    operating_point_high_recall?: { fpr: number; recall: number; precision: number };
   };
   feature_specs: FeatureSpec[];
   shap_max_abs_diff_vs_shap_package: number | null;
@@ -83,8 +85,11 @@ export interface PrSummary {
   percentile: number;
   band: Band;
   flagged: boolean;
+  high_recall_flagged: boolean;
   outcome: Outcome;
   fixed_by: string;
+  top_factor: string;
+  top_share: number;
 }
 
 export interface Factor {
@@ -93,6 +98,7 @@ export interface Factor {
   value: number | null;
   median: number | null;
   shap: number;
+  share: number;
   finding: string;
   remediation: string;
 }
@@ -102,8 +108,10 @@ export interface Score {
   percentile: number;
   band: Band;
   flagged: boolean;
+  high_recall_flagged: boolean;
   base_value: number;
   contributions: Record<string, number>;
+  shares: Record<string, number>;
   factors: Factor[];
 }
 
@@ -133,6 +141,31 @@ export interface AnalyzeResult {
   warnings: string[];
   score: Score;
   cached: boolean;
+}
+
+export type Population = "flagged" | "defects" | "caught" | "missed" | "all";
+
+export interface Driver {
+  feature: string;
+  label: string;
+  group: string;
+  description: string;
+  mean_share: number;
+  prs_top1: number;
+  prs_top3: number;
+  prs_raising: number;
+  median_value: number | null;
+  dataset_median: number | null;
+  recommendation: string;
+}
+
+export interface DriversResult {
+  population: Population;
+  split: string;
+  repo: string | null;
+  prs: number;
+  defect_rate: number | null;
+  drivers: Driver[];
 }
 
 export class ApiError extends Error {
@@ -166,6 +199,11 @@ export const api = {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q.set(k, String(v));
     return request<{ total: number; items: PrSummary[] }>(`/api/prs?${q}`);
+  },
+  drivers: (population: Population, repo?: string, split = "test") => {
+    const q = new URLSearchParams({ population, split });
+    if (repo) q.set("repo", repo);
+    return request<DriversResult>(`/api/drivers?${q}`);
   },
   pr: (repo: string, number: number) => request<PrDetail>(`/api/prs/${repo}/${number}`),
   analyze: (url: string) => request<AnalyzeResult>("/api/analyze", { method: "POST", body: JSON.stringify({ url }) }),

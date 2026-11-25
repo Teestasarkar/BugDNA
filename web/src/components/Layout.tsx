@@ -5,6 +5,7 @@ import { Logo } from "./ui";
 const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/prs", label: "Explorer" },
+  { to: "/drivers", label: "Risk drivers" },
   { to: "/analyze", label: "Analyze a PR" },
   { to: "/methodology", label: "Methodology" },
 ];
@@ -49,7 +50,7 @@ export default function Layout() {
       <footer className="footer">
         <div className="shell">
           <span>PR Risk Radar · XGBoost + TreeSHAP over real GitHub history, labelled with SZZ</span>
-          <a href="https://github.com/Teestasarkar/pr-risk-radar">Source on GitHub</a>
+          <a href="https://github.com/Teestasarkar/BugDNA/tree/pr-risk-radar">Source on GitHub</a>
         </div>
       </footer>
     </>

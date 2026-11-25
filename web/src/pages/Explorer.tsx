@@ -22,6 +22,7 @@ export default function Explorer() {
   const band = (params.get("band") ?? "all") as Band | "all";
   const q = params.get("q") ?? "";
   const sort = params.get("sort") ?? "prob";
+  const factor = params.get("factor") ?? "";
   const offset = Number(params.get("offset") ?? 0);
 
   const set = (patch: Record<string, string | number | null>) => {
@@ -35,9 +36,11 @@ export default function Explorer() {
   };
 
   const repos = useAsync(api.repos, []);
+  const metrics = useAsync(api.metrics, []);
+  const labelOf = (f: string) => metrics.data?.feature_specs.find((s) => s.name === f)?.label ?? f;
   const list = useAsync(
-    () => api.prs({ repo, split, outcome, band, q, sort, order: "desc", limit: PAGE, offset }),
-    [repo, split, outcome, band, q, sort, offset],
+    () => api.prs({ repo, split, outcome, band, factor, q, sort, order: "desc", limit: PAGE, offset }),
+    [repo, split, outcome, band, factor, q, sort, offset],
   );
 
   return (
@@ -68,6 +71,10 @@ export default function Explorer() {
           <option value="MEDIUM">Medium</option>
           <option value="LOW">Low</option>
         </select>
+        <select aria-label="Top risk driver" value={factor} onChange={(e) => set({ factor: e.target.value })}>
+          <option value="">Any top driver</option>
+          {metrics.data?.feature_specs.map((f) => <option key={f.name} value={f.name}>{f.label}</option>)}
+        </select>
         <select aria-label="Sort" value={sort} onChange={(e) => set({ sort: e.target.value === "prob" ? null : e.target.value })}>
           <option value="prob">Riskiest first</option>
           <option value="merged_at">Newest first</option>
@@ -92,7 +99,7 @@ export default function Explorer() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Pull request</th><th>Risk score</th><th>Band</th><th>What happened</th><th>Merged</th></tr>
+                <tr><th>Pull request</th><th>Risk score</th><th>Band</th><th>Top risk driver</th><th>What happened</th><th>Merged</th></tr>
               </thead>
               <tbody>
                 {list.data.items.map((p) => {
@@ -105,6 +112,11 @@ export default function Explorer() {
                       </td>
                       <td><MiniMeter value={p.percentile} band={p.band} /></td>
                       <td><BandBadge band={p.band} /></td>
+                      <td>
+                        {p.top_factor ? (
+                          <div className="driver-cell"><span>{labelOf(p.top_factor)}</span><span className="sub">{p.top_share.toFixed(0)}% of its risk</span></div>
+                        ) : <span className="muted">–</span>}
+                      </td>
                       <td>
                         <OutcomeBadge label={p.label} />
                         {p.label === 1 && (
@@ -120,7 +132,7 @@ export default function Explorer() {
                   );
                 })}
                 {list.data.items.length === 0 && (
-                  <tr><td colSpan={5} className="muted">No pull requests match these filters.</td></tr>
+                  <tr><td colSpan={6} className="muted">No pull requests match these filters.</td></tr>
                 )}
               </tbody>
             </table>
